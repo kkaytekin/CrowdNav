@@ -17,7 +17,7 @@ class CrowdSim(gym.Env):
         """
         Movement simulation for n+1 agents
         Agent can either be human or robot.
-        humans are controlled by a unknown and fixed policy.
+        humans are controlled by an unknown and fixed policy.
         robot is controlled by a known and learnable policy.
 
         """
@@ -217,7 +217,7 @@ class CrowdSim(gym.Env):
         # centralized orca simulator for all humans
         if not self.robot.reached_destination():
             raise ValueError('Episode is not done yet')
-        params = (10, 10, 5, 5)
+        params = (10, 10, 5, 5) # kagan: i guess 10,10 is the box size of the environment and 5,5 is where the origin is
         sim = rvo2.PyRVOSimulator(self.time_step, *params, 0.3, 1)
         sim.addAgent(self.robot.get_position(), *params, self.robot.radius, self.robot.v_pref,
                      self.robot.get_velocity())
@@ -307,7 +307,7 @@ class CrowdSim(gym.Env):
         if self.robot.sensor == 'coordinates':
             ob = [human.get_observable_state() for human in self.humans]
         elif self.robot.sensor == 'RGB':
-            raise NotImplementedError
+            raise NotImplementedError #todo: implement
 
         return ob
 
@@ -343,6 +343,8 @@ class CrowdSim(gym.Env):
             ey = py + vy * self.time_step
             # closest distance between boundaries of two agents
             closest_dist = point_to_segment_dist(px, py, ex, ey, 0, 0) - human.radius - self.robot.radius
+            # kagan: discomfort distance is added later as a penalty.
+            # adding it above would set it as collision and stop the episode.
             if closest_dist < 0:
                 collision = True
                 # logging.debug("Collision: distance between robot and p{} is {:.2E}".format(i, closest_dist))
@@ -379,7 +381,7 @@ class CrowdSim(gym.Env):
             info = ReachGoal()
         elif dmin < self.discomfort_dist:
             # only penalize agent for getting too close if it's visible
-            # adjust the reward based on FPS
+            # adjust the reward based on FPS # kagan: nice! time step weights penalty
             reward = (dmin - self.discomfort_dist) * self.discomfort_penalty_factor * self.time_step
             done = False
             info = Danger(dmin)
@@ -388,7 +390,7 @@ class CrowdSim(gym.Env):
             done = False
             info = Nothing()
 
-        if update:
+        if update: # kagan: update == false if doing one_step_look_ahead
             # store state, action value and attention weights
             self.states.append([self.robot.get_full_state(), [human.get_full_state() for human in self.humans]])
             if hasattr(self.robot.policy, 'action_values'):
@@ -410,12 +412,12 @@ class CrowdSim(gym.Env):
             if self.robot.sensor == 'coordinates':
                 ob = [human.get_observable_state() for human in self.humans]
             elif self.robot.sensor == 'RGB':
-                raise NotImplementedError
+                raise NotImplementedError #todo: implement...
         else:
             if self.robot.sensor == 'coordinates':
                 ob = [human.get_next_observable_state(action) for human, action in zip(self.humans, human_actions)]
             elif self.robot.sensor == 'RGB':
-                raise NotImplementedError
+                raise NotImplementedError #todo: implement...
 
         return ob, reward, done, info
 
@@ -492,6 +494,7 @@ class CrowdSim(gym.Env):
 
             # add robot and its goal
             robot_positions = [state[0].position for state in self.states]
+            # kagan: wow so robot goal is almost the same? todo: validate.
             goal = mlines.Line2D([0], [4], color=goal_color, marker='*', linestyle='None', markersize=15, label='Goal')
             robot = plt.Circle(robot_positions[0], self.robot.radius, fill=True, color=robot_color)
             ax.add_artist(robot)
