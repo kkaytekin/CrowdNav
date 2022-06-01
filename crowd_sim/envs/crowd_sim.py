@@ -687,11 +687,53 @@ class CrowdSim(gym.Env):
                 ax.add_artist(arrow)
             global_step = 0
 
+
+            ## SHOW FOV
+            def calcFOVLineEndPoint(ang, point, extendFactor):
+                # choose the extendFactor big enough
+                # so that the endPoints of the FOVLine is out of xlim and ylim of the figure
+                FOVLineRot = np.array([[np.cos(ang), -np.sin(ang), 0],
+                                       [np.sin(ang), np.cos(ang), 0],
+                                       [0, 0, 1]])
+                point.extend([1])
+                # apply rotation matrix
+                newPoint = np.matmul(FOVLineRot, np.reshape(point, [3, 1]))
+                # increase the distance between the line start point and the end point
+                newPoint = [extendFactor * newPoint[0, 0], extendFactor * newPoint[1, 0], 1]
+                return newPoint
+
+            if self.robot_fov < np.pi * 2:
+                FOVAng = self.robot_fov / 2
+                fov_line_1_x_data = []
+                fov_line_1_y_data = []
+                fov_line_2_x_data = []
+                fov_line_2_y_data = []
+                for i in range(len(robot_positions)):
+                    startPointX = orientations[0][i][0][0]
+                    startPointY = orientations[0][i][0][1]
+                    endPointX   = orientations[0][i][1][0]
+                    endPointY   = orientations[0][i][1][1]
+                    # endPointX = startPointX + radius * np.cos(orientation[i])
+                    # endPointY = startPointY + radius * np.sin(orientation[i])
+                    end_points1 = calcFOVLineEndPoint(FOVAng, [endPointX - startPointX, endPointY - startPointY], 20. / self.robot.radius)
+                    end_points2 = calcFOVLineEndPoint(-FOVAng, [endPointX - startPointX, endPointY - startPointY], 20. / self.robot.radius)
+                    fov_line_1_x_data.append([startPointX,end_points1[0]])
+                    fov_line_1_y_data.append([startPointY,end_points1[1]])
+                    fov_line_2_x_data.append([startPointX,end_points2[0]])
+                    fov_line_2_y_data.append([startPointY,end_points2[1]])
+
+                FOVLine1 = plt.Line2D(fov_line_1_x_data[0], fov_line_1_y_data[0], linestyle='--')
+                FOVLine2 = plt.Line2D(fov_line_2_x_data[0], fov_line_2_y_data[0], linestyle='--')
+                ax.add_artist(FOVLine1)
+                ax.add_artist(FOVLine2)
+
             def update(frame_num):
                 nonlocal global_step
                 nonlocal arrows
                 global_step = frame_num
                 robot.center = robot_positions[frame_num]
+                FOVLine1.set_data(fov_line_1_x_data[frame_num],fov_line_1_y_data[frame_num])
+                FOVLine2.set_data(fov_line_2_x_data[frame_num],fov_line_2_y_data[frame_num])
                 for i, human in enumerate(humans):
                     human.center = human_positions[frame_num][i]
                     human_numbers[i].set_position((human.center[0] - x_offset, human.center[1] - y_offset))
@@ -743,41 +785,6 @@ class CrowdSim(gym.Env):
             anim = animation.FuncAnimation(fig, update, frames=len(self.states), interval=self.time_step * 1000)
             anim.running = True
 
-            ## SHOW FOV
-            def calcFOVLineEndPoint(ang, point, extendFactor):
-                # choose the extendFactor big enough
-                # so that the endPoints of the FOVLine is out of xlim and ylim of the figure
-                FOVLineRot = np.array([[np.cos(ang), -np.sin(ang), 0],
-                                       [np.sin(ang), np.cos(ang), 0],
-                                       [0, 0, 1]])
-                point.extend([1])
-                # apply rotation matrix
-                newPoint = np.matmul(FOVLineRot, np.reshape(point, [3, 1]))
-                # increase the distance between the line start point and the end point
-                newPoint = [extendFactor * newPoint[0, 0], extendFactor * newPoint[1, 0], 1]
-                return newPoint
-
-            if self.robot_fov < np.pi * 2:
-                FOVAng = self.robot_fov / 2
-                FOVLine1 = mlines.Line2D([0, 0], [0, 0], linestyle='--')
-                FOVLine2 = mlines.Line2D([0, 0], [0, 0], linestyle='--')
-
-
-                startPointX , startPointY = robot_positions[0]
-                endPointX = startPointX + radius * np.cos(orientations[0])
-                endPointY = startPointY + radius * np.sin(orientations[0])
-
-                # transform the vector back to world frame origin, apply rotation matrix, and get end point of FOVLine
-                # the start point of the FOVLine is the center of the robot
-                FOVEndPoint1 = calcFOVLineEndPoint(FOVAng, [endPointX - startPointX, endPointY - startPointY], 20. / self.robot.radius)
-                FOVLine1.set_xdata(np.array([startPointX, startPointX + FOVEndPoint1[0]]))
-                FOVLine1.set_ydata(np.array([startPointY, startPointY + FOVEndPoint1[1]]))
-                FOVEndPoint2 = calcFOVLineEndPoint(-FOVAng, [endPointX - startPointX, endPointY - startPointY], 20. / self.robot.radius)
-                FOVLine2.set_xdata(np.array([startPointX, startPointX + FOVEndPoint2[0]]))
-                FOVLine2.set_ydata(np.array([startPointY, startPointY + FOVEndPoint2[1]]))
-
-                ax.add_artist(FOVLine1)
-                ax.add_artist(FOVLine2)
 
             if output_file is not None:
                 ffmpeg_writer = animation.writers['ffmpeg']
