@@ -49,16 +49,14 @@ class CrowdSim(gym.Env):
         self.action_values = None
         self.attention_weights = None
 
-        # limit FOV
+        # limited FOV
         self.robot_fov = None
         self.human_fov = None
+        self.uncertainty_growth = None
         # todo: i didnt like this idea of dummy human & robot.
-        self.dummy_human = None
-        self.dummy_robot = None
+        #self.dummy_human = None
+        #self.dummy_robot = None
 
-        #for render
-        self.render_axis=None
-        self.potential=None
 
     def configure(self, config):
         self.config = config
@@ -94,8 +92,10 @@ class CrowdSim(gym.Env):
         #Fov Config
         self.robot_fov = np.pi * config.getfloat('robot' , 'FOV')
         self.human_fov = np.pi * config.getfloat('humans', 'FOV')
+        self.uncertainty_growth = config.get('sim', 'uncertainty_growth')
         logging.info('robot FOV %f', self.robot_fov)
         logging.info('humans FOV %f', self.human_fov)
+        logging.info('uncertainty growth mode: %s', self.uncertainty_growth)
 
         # # set dummy human and dummy robot
         # # dummy humans, used if any human is not in view of other agents
@@ -370,7 +370,7 @@ class CrowdSim(gym.Env):
             for human in humans_in_view:
                 human.increment_uncertainty('reset')
             for id in unseen_human_ids:
-                self.humans[id].increment_uncertainty('logarithmic')
+                self.humans[id].increment_uncertainty(self.uncertainty_growth)
             ob = [human.get_observable_state() for human in self.humans]
 
         return ob
