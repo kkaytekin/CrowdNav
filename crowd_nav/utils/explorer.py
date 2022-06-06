@@ -39,7 +39,7 @@ class Explorer(object):
             actions = []
             rewards = []
             while not done:
-                action = self.robot.act(ob)
+                action = self.robot.act(ob, self.env.obstacle_states)
                 ob, reward, done, info = self.env.step(action)
                 states.append(self.robot.policy.last_state)
                 actions.append(action)
@@ -66,6 +66,7 @@ class Explorer(object):
             if update_memory:
                 if isinstance(info, ReachGoal) or isinstance(info, Collision):
                     # only add positive(success) or negative(collision) experience in experience set
+                    # print("{}".format(i))
                     self.update_memory(states, actions, rewards, imitation_learning)
 
             cumulative_rewards.append(sum([pow(self.gamma, t * self.robot.time_step * self.robot.v_pref)

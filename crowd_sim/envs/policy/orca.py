@@ -102,6 +102,13 @@ class ORCA(Policy):
             for human_state in state.human_states:
                 self.sim.addAgent(human_state.position, *params, human_state.radius + 0.01 + self.safety_space,
                                   self.max_speed, human_state.velocity)
+            ## Add static obstacles in to the simulation
+            for obstacle_state in state.obstacle_states_rvo2:
+                obs_type, vertices = obstacle_state.get_rvo2_obstacle_state()
+                if obs_type == "Rectangle":
+                    self.sim.addObstacle(vertices)
+            if state.obstacle_states is not None:
+                self.sim.processObstacles()
         else:
             self.sim.setAgentPosition(0, self_state.position)
             self.sim.setAgentVelocity(0, self_state.velocity)

@@ -41,10 +41,13 @@ class ObservableState(object):
 
 
 class JointState(object):
-    def __init__(self, self_state, human_states):
+    def __init__(self, self_state, human_states, obstacle_states):
         assert isinstance(self_state, FullState)
         for human_state in human_states:
             assert isinstance(human_state, ObservableState)
 
         self.self_state = self_state
         self.human_states = human_states
+        self.obstacle_states_rvo2 = obstacle_states
+        self.obstacle_states = [obstacle_state.get_observable_state() for obstacle_state in obstacle_states]
+        

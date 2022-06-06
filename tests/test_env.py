@@ -33,10 +33,10 @@ def main():
     
     done = False
 
-    ob = env.reset(phase='test', test_case=-2)
+    ob = env.reset(phase='test', test_case=-3)
     last_pos = np.array(robot.get_position())
     while not done:
-        action = robot.act(ob)
+        action = robot.act(ob, env.obstacle_states)
         ob, _, done, info = env.step(action)
         current_pos = np.array(robot.get_position())
         logging.debug('Speed: %.2f', np.linalg.norm(current_pos - last_pos) / robot.time_step)

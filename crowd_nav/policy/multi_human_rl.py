@@ -1,3 +1,4 @@
+from charset_normalizer import logging
 import torch
 import numpy as np
 from crowd_sim.envs.utils.action import ActionRot, ActionXY
@@ -94,13 +95,18 @@ class MultiHumanRL(CADRL):
         :param state:
         :return: tensor of shape (# of humans, len(state))
         """
-        state_tensor = torch.cat([torch.Tensor([state.self_state + human_state]).to(self.device)
+        state_tensor_humans = torch.cat([torch.Tensor([state.self_state + human_state]).to(self.device)
                                   for human_state in state.human_states], dim=0)
+        state_tensor_obstacles = torch.cat([torch.Tensor([state.self_state + obstacle_state]).to(self.device)
+                                  for obstacle_state in state.obstacle_states], dim=0)
+        state_tensor = torch.cat((state_tensor_humans, state_tensor_obstacles), dim = 0)
+        
         if self.with_om:
             occupancy_maps = self.build_occupancy_maps(state.human_states)
             state_tensor = torch.cat([self.rotate(state_tensor), occupancy_maps.to(self.device)], dim=1)
         else:
             state_tensor = self.rotate(state_tensor)
+        logging.debug("The state tensor shape: {}".format(state_tensor.shape))
         return state_tensor
 
     def input_dim(self):

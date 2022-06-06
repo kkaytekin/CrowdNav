@@ -1,5 +1,7 @@
 import logging
 from turtle import color
+from typing import Tuple
+from crowd_sim.envs.utils.obstacle import Obstacle
 import gym
 import matplotlib.lines as mlines
 import numpy as np
@@ -59,7 +61,6 @@ class CrowdSim(gym.Env):
         self.collision_penalty = config.getfloat('reward', 'collision_penalty')
         self.discomfort_dist = config.getfloat('reward', 'discomfort_dist')
         self.discomfort_penalty_factor = config.getfloat('reward', 'discomfort_penalty_factor')
-        self.out_boundary_penalty = config.getfloat('reward', 'out_boundary_penalty')
         if self.config.get('humans', 'policy') == 'orca':
             self.case_capacity = {'train': np.iinfo(np.uint32).max - 2000, 'val': 1000, 'test': 1000}
             self.case_size = {'train': np.iinfo(np.uint32).max - 2000, 'val': config.getint('env', 'val_size'),
@@ -68,54 +69,195 @@ class CrowdSim(gym.Env):
             self.test_sim = config.get('sim', 'test_sim')
             self.square_width = config.getfloat('sim', 'square_width')
             self.circle_radius = config.getfloat('sim', 'circle_radius')
-            self.human_num = config.getint('sim', 'human_num')
+            self.max_human_num = config.getint('sim', 'max_human_num')
+            self.min_human_num = config.getint('sim', 'min_human_num')
             ## Parameter for static obstacles
             self.min_obst_offset = config.getfloat('sim', 'min_obst_offset')
-            self.static_obstacle_num = config.getint('sim', 'static_obstacle_num')
-            self.obstacle_max_radius = config.getfloat('sim', 'obstacle_max_radius')
-            self.obstacle_min_radius = config.getfloat('sim', 'obstacle_min_radius')
+            self.max_static_obstacle_num = config.getint('sim', 'max_static_obstacle_num')
+            self.min_static_obstacle_num = config.getint('sim', 'min_static_obstacle_num')
+            self.obstacle_max_length = config.getfloat('sim', 'obstacle_max_length')
+            self.obstacle_min_length = config.getfloat('sim', 'obstacle_min_length')
 
             self.boundary = config.getfloat('sim', 'boundary')
         else:
             raise NotImplementedError
         self.case_counter = {'train': 0, 'test': 0, 'val': 0}
 
-        logging.info('human number: {}'.format(self.human_num))
+        
         if self.randomize_attributes:
             logging.info("Randomize human's radius and preferred speed")
         else:
             logging.info("Not randomize human's radius and preferred speed")
         logging.info('Training simulation: {}, test simulation: {}'.format(self.train_val_sim, self.test_sim))
         logging.info('Square width: {}, circle width: {}'.format(self.square_width, self.circle_radius))
-        logging.info("Number of static obstacles: {}".format(self.static_obstacle_num))
-        logging.info("Static obstacles diameter range: {} - {}".format(2 * self.obstacle_min_radius, 2 * self.obstacle_max_radius))
+        logging.info("Static obstacles length range: {} - {}".format(self.obstacle_min_length, self.obstacle_max_length))
 
     def set_robot(self, robot):
         self.robot = robot
+    
+    def generate_rectangular_obstacle(self, length, width, center: Tuple) -> Obstacle:
+        cx, cy = center
+        '''
+        Start from the top right vertice
+            (Length)
+        ver2------ver1
+        |            |
+        |   (cx,cy)  |  (Width)
+        |            |
+        ver3------ver4
+        '''
+        ver1 = (cx + length / 2, cy + width / 2) 
+        ver2 = (cx - length / 2, cy + width / 2)
+        ver3 = (cx - length / 2, cy - width / 2)
+        ver4 = (cx + length / 2, cy - width / 2)
+        vertices = []
+        vertices.append(ver1)
+        vertices.append(ver2)
+        vertices.append(ver3)
+        vertices.append(ver4)
+        obstacle = Obstacle(vertices)
 
-    def generate_random_obstacles(self, obs_num):
-        width = self.square_width
-        height = self.square_width
-        max_radius = self.obstacle_max_radius - self.obstacle_min_radius
-        min_radius = self.obstacle_min_radius
+        return obstacle
+
+
+    def generate_boundary(self, length, width = 1): 
+        '''
+        Generate the rectangular boundary around the 4 edges with given shape. 
+        The boundary would be also consider as the static obstacles
+        ------BD1------
+        |             |
+        |             |
+       BD2           BD4
+        |             |
+        |             |
+        ------BD3------
+        '''
         self.obs = []
+        ## Generate the 4 rectangles' center
+        c1 = (0, length / 2 + width / 2)
+        c2 = (-length / 2 - width / 2, 0)
+        c3 = (0, -length / 2 - width / 2)
+        c4 = (length / 2 + width / 2, 0)
 
-        for i in range(obs_num):
-            human = Human(self.config, 'humans') ## we model the static obstacles as static humans
+        bd1 = self.generate_rectangular_obstacle(length + 2 * width, width, c1)
+        bd2 = self.generate_rectangular_obstacle(width, length, c2)
+        bd3 = self.generate_rectangular_obstacle(length + 2 * width, width, c3)
+        bd4 = self.generate_rectangular_obstacle(width, length, c4)
+        self.obs.append(bd1)
+        self.obs.append(bd2)
+        self.obs.append(bd3)
+        self.obs.append(bd4)
+
+    def generate_random_obstacles(self, num_obs):
+        for i in range(num_obs):
             while True:
-                px = (np.random.random() - 0.5) * width
-                py = (np.random.random() - 0.5) * height
-                r = (np.random.random()) * max_radius + min_radius
+                cx = (np.random.random() - 0.5) * self.square_width
+                cy = (np.random.random() - 0.5) * self.square_width
+                l = (self.obstacle_max_length - self.obstacle_min_length) * np.random.random() + self.obstacle_min_length
+                w = (self.obstacle_max_length - self.obstacle_min_length) * np.random.random() + self.obstacle_min_length
+                if np.random.random() > 0.5: ## Generate vertical obstacle
+                    obstacle = self.generate_rectangular_obstacle(length = l, width = w, center = (cx, cy))
+                else: ## generate horizontal obstacle
+                    obstacle = self.generate_rectangular_obstacle(length = w, width = l, center = (cx, cy))
                 collide = False
-                for agent in [self.robot] + self.obs:
-                    if norm((px - agent.px, py - agent.py)) < r + agent.radius + self.discomfort_dist + self.min_obst_offset or norm((px - self.robot_gx, py - self.robot_gy)) < r + self.discomfort_dist:
+                for o in self.obs:
+                    _, min_dist = self.is_obstacles_collide(o, obstacle)
+                    if min_dist <= self.min_obst_offset:
                         collide = True
                         break
+                flag, _ = self.is_agent_obstacle_collide(obstacle, agent = self.robot)
+                if flag:
+                    collide = True
+                flag, _ = self.is_agent_obstacle_collide(obstacle, circle = (self.robot.gx, self.robot.gy, self.robot.radius))
+                if flag:
+                    collide = True
                 if not collide:
                     break
-            human.set(px, py, px, py, 0, 0, 0, radius=r)
-            # print("Generate obstacle!")
-            self.obs.append(human)
+            self.obs.append(obstacle)
+
+
+    # def generate_random_obstacles(self):
+    #     vertices1 = [(4, 4), (-4, 4), (-4, 1), (4, 1)]
+    #     vertices2 = [(4, -1), (-4, -1), (-4, -4), (4, -4)]
+    #     obstacle = Obstacle(vertices1)
+        
+    #     self.obs.append(obstacle)
+
+    #     obstacle = Obstacle(vertices2)
+    #     self.obs.append(obstacle)
+
+    def is_agent_obstacle_collide(self, obstacle: Obstacle, circle = None, agent = None):
+        '''
+        Since out obstacles now are all rectangle shape and our agents are all circle shape
+        We can formulate the collision as checking if the circle and rectangle intersect with
+        each other. Reference: https://www.gamedevelopment.blog/collision-detection-circles-rectangles-and-polygons/
+        '''
+        if circle == None and agent == None:
+            logging.error("Need to at least specify one type of agent input")
+        if agent == None:
+            px, py, r = circle
+        else:
+            px = agent.px
+            py = agent.py
+            r = agent.radius
+        
+        rect_cx, rect_cy = obstacle.get_center()
+        dx = np.abs(px - rect_cx)
+        dy = np.abs(py - rect_cy)
+
+        collision = False
+
+        dx_to_edge = dx - obstacle.get_length() / 2
+        dy_to_edge = dy - obstacle.get_width() / 2
+
+        min_dist = np.sqrt((dx_to_edge * (dx_to_edge > 0)) ** 2 + (dy_to_edge * (dy_to_edge > 0)) ** 2) - r
+
+        if min_dist <= 0:
+            collision = True
+
+        return collision, min_dist
+        
+    def is_obstacles_collide(self, obstacle1: Obstacle, obstacle2: Obstacle):
+        """
+        Compute the shortest distance between two rectangular obstacles.
+        Reference: https://math.stackexchange.com/questions/2724537/finding-the-clear-spacing-distance-between-two-rectangles
+        """
+        collision = False
+        cx1, cy1 = obstacle1.get_center()
+        l1 = obstacle1.get_length()
+        w1 = obstacle1.get_width()
+        cx2, cy2 = obstacle2.get_center()
+        l2 = obstacle2.get_length()
+        w2 = obstacle2.get_width()
+
+        min_dist = np.max([np.abs(cx1 - cx2) - (l1 + l2) / 2, np.abs(cy1 - cy2) - (w1 + w2) / 2])     
+        if min_dist <= 0:
+            collision = True
+
+        return collision, min_dist   
+    # def generate_random_obstacles(self, obs_num):
+    #     width = self.square_width
+    #     height = self.square_width
+    #     max_radius = self.obstacle_max_radius - self.obstacle_min_radius
+    #     min_radius = self.obstacle_min_radius
+    #     self.obs = []
+
+    #     for i in range(obs_num):
+    #         obstacle = Obstacle(self.config, 'obstacle') ## we model the static obstacles as static humans
+    #         while True:
+    #             px = (np.random.random() - 0.5) * width
+    #             py = (np.random.random() - 0.5) * height
+    #             r = (np.random.random()) * max_radius + min_radius
+    #             collide = False
+    #             for agent in [self.robot] + self.obs:
+    #                 if norm((px - agent.px, py - agent.py)) < r + agent.radius + self.discomfort_dist + self.min_obst_offset or norm((px - self.robot_gx, py - self.robot_gy)) < r + self.discomfort_dist:
+    #                     collide = True
+    #                     break
+    #             if not collide:
+    #                 break
+    #         human.set(px, py, px, py, 0, 0, 0, radius=r)
+    #         # print("Generate obstacle!")
+    #         self.obs.append(human)
 
     def generate_random_human_position(self, human_num, rule):
         """
@@ -185,11 +327,11 @@ class CrowdSim(gym.Env):
                     else:
                         human = self.generate_square_crossing_human()
                     self.humans.append(human)
-        elif rule == 'test': ## Only test for generating static obstacles 
-            self.generate_random_obstacles(human_num)
-            self.humans = []
-            for i in range(human_num):
-                self.humans.append(self.generate_square_crossing_human())
+        # elif rule == 'test': ## Only test for generating static obstacles 
+        #     self.generate_random_obstacles(human_num)
+        #     self.humans = []
+        #     for i in range(human_num):
+        #         self.humans.append(self.generate_square_crossing_human())
         else:
             raise ValueError("Rule doesn't exist")
         
@@ -213,6 +355,12 @@ class CrowdSim(gym.Env):
                     collide = True
                     break
             if not collide:
+                for o in self.obs:
+                    flag, _ = self.is_agent_obstacle_collide(o, circle = (px, py, human.radius))
+                    if flag:
+                        collide = True
+                        break
+            if not collide:
                 break
         human.set(px, py, -px, -py, 0, 0, 0)
         return human
@@ -230,10 +378,16 @@ class CrowdSim(gym.Env):
             py = (np.random.random() - 0.5) * self.square_width
             collide = False
             # for agent in [self.robot] + self.humans:
-            for agent in [self.robot] + self.humans + self.obs:
+            for agent in [self.robot] + self.humans:
                 if norm((px - agent.px, py - agent.py)) < human.radius + agent.radius + self.discomfort_dist:
                     collide = True
                     break
+            if not collide:
+                for o in self.obs:
+                    flag, _ = self.is_agent_obstacle_collide(o, circle = (px, py, human.radius))
+                    if flag:
+                        collide = True
+                        break
             if not collide:
                 break
         while True:
@@ -241,10 +395,16 @@ class CrowdSim(gym.Env):
             gy = (np.random.random() - 0.5) * self.square_width
             collide = False
             # for agent in [self.robot] + self.humans:
-            for agent in [self.robot] + self.humans + self.obs:
+            for agent in [self.robot] + self.humans:
                 if norm((gx - agent.gx, gy - agent.gy)) < human.radius + agent.radius + self.discomfort_dist:
                     collide = True
                     break
+            if not collide:
+                for o in self.obs:
+                    flag, _ = self.is_agent_obstacle_collide(o, circle = (gx, gy, human.radius))
+                    if flag:
+                        collide = True
+                        break
             if not collide:
                 break
         human.set(px, py, gx, gy, 0, 0, 0)
@@ -292,7 +452,7 @@ class CrowdSim(gym.Env):
         del sim
         return self.human_times
 
-    def generate_agent_goal(self, goal_range = 8, perturb = False, perturb_range = 1):
+    def generate_agent_position(self, position_range = 8, perturb = False, perturb_range = 1):
         if perturb:
             px = (np.random.random() - 0.5) * perturb_range
             py = (np.random.random() - 0.5) * perturb_range
@@ -300,8 +460,8 @@ class CrowdSim(gym.Env):
             px = 0
             py = 0
         angle = np.random.random() * 2 * np.pi
-        gx = goal_range * np.cos(angle) + px
-        gy = goal_range * np.sin(angle) + py
+        gx = position_range * np.random.random() * np.cos(angle) + px
+        gy = position_range * np.random.random() * np.sin(angle) + py
         return gx, gy
 
     def reset(self, phase='test', test_case=None):
@@ -315,10 +475,7 @@ class CrowdSim(gym.Env):
         if test_case is not None:
             self.case_counter[phase] = test_case
         self.global_time = 0
-        if phase == 'test':
-            self.human_times = [0] * self.human_num
-        else:
-            self.human_times = [0] * (self.human_num if self.robot.policy.multiagent_training else 1)
+        
         if not self.robot.policy.multiagent_training:
             self.train_val_sim = 'circle_crossing'
 
@@ -327,21 +484,37 @@ class CrowdSim(gym.Env):
         else:
             counter_offset = {'train': self.case_capacity['val'] + self.case_capacity['test'],
                               'val': 0, 'test': self.case_capacity['val']}
+            ## First, we generate the boundary
+            self.generate_boundary(length = self.boundary)
             # we should make the goal position more diverse
             ## The random seed should also be added here, otherwise the 
             ## generated environment would be totally different
             np.random.seed(counter_offset[phase] + self.case_counter[phase])
-            self.robot_gx, self.robot_gy = self.generate_agent_goal()
+            while True:
+                self.robot_gx, self.robot_gy = self.generate_agent_position()
+                self.robot_px, self.robot_py = self.generate_agent_position(perturb = True, perturb_range = 5, position_range = 10)
+                if np.abs(self.robot_gx - self.robot_px) > self.boundary / 3 and np.abs(self.robot_gy - self.robot_py) > self.boundary / 3:
+                    break
             # self.robot.set(0, -self.circle_radius, 0, self.circle_radius, 0, 0, np.pi / 2)
-            self.robot.set(-self.robot_gx, -self.robot_gy, self.robot_gx, self.robot_gy, 0, 0, np.pi / 2)
+            self.robot.set(self.robot_px, self.robot_py, self.robot_gx, self.robot_gy, 0, 0, np.pi / 2)
             if self.case_counter[phase] >= 0:
                 np.random.seed(counter_offset[phase] + self.case_counter[phase])
-                ## Geneate static obstacles first
-                self.generate_random_obstacles(self.static_obstacle_num)
+                
                 if phase in ['train', 'val']:
-                    human_num = self.human_num if self.robot.policy.multiagent_training else 1
-                    self.generate_random_human_position(human_num=human_num, rule=self.train_val_sim)
+                    # self.human_num = int((self.max_human_num - self.min_human_num) * np.random.random() + self.min_human_num) if self.robot.policy.multiagent_training else 1
+                    # logging.info('human number: {}'.format(self.human_num))
+                    ## When training, we fixed the obstacle's number
+                    self.human_num = self.max_human_num
+                    self.static_obstacle_num = self.max_static_obstacle_num 
+                    self.generate_random_obstacles(self.static_obstacle_num)
+                    self.generate_random_human_position(human_num=self.human_num, rule=self.train_val_sim)
                 else:
+                    ## Geneate static obstacles first
+                    self.static_obstacle_num = int((self.max_static_obstacle_num - self.min_static_obstacle_num) * np.random.random() + self.min_static_obstacle_num)
+                    logging.info("Number of static obstacles: {}".format(self.static_obstacle_num))
+                    self.generate_random_obstacles(self.static_obstacle_num)
+                    self.human_num = int((self.max_human_num - self.min_human_num) * np.random.random() + self.min_human_num)
+                    logging.info('human number: {}'.format(self.human_num))
                     self.generate_random_human_position(human_num=self.human_num, rule=self.test_sim)
                 # case_counter is always between 0 and case_size[phase]
                 self.case_counter[phase] = (self.case_counter[phase] + 1) % self.case_size[phase]
@@ -357,8 +530,16 @@ class CrowdSim(gym.Env):
                 elif self.case_counter[phase] == -2:
                     # for testing to generate static obstacle
                     self.generate_random_human_position(human_num=self.human_num, rule='square_crossing')
+                elif self.case_counter[phase] == -3:
+                    self.generate_random_obstacles(num_obs = self.static_obstacle_num)
+                    self.generate_random_human_position(human_num=self.human_num, rule='square_crossing')
                 else:
                     raise NotImplementedError
+
+        if phase == 'test':
+            self.human_times = [0] * self.human_num
+        else:
+            self.human_times = [0] * (self.human_num if self.robot.policy.multiagent_training else 1)
 
         for agent in [self.robot] + self.humans:
             agent.time_step = self.time_step
@@ -375,8 +556,9 @@ class CrowdSim(gym.Env):
             ## Let the static obstacles also generate their states
             # ob = [human.get_observable_state() for human in self.humans]
             ob = [human.get_observable_state() for human in self.humans]
-            temp = [obstacle.get_observable_state() for obstacle in self.obs]
-            ob += temp
+            self.obstacle_states = [obstacle for obstacle in self.obs]
+            # temp = [obstacle.get_obstacle_state() for obstacle in self.obs]
+            # ob += temp
         elif self.robot.sensor == 'RGB':
             raise NotImplementedError
 
@@ -406,7 +588,7 @@ class CrowdSim(gym.Env):
         #     still = True
         
         if human.reached_destination():
-            gx, gy = self.generate_agent_goal()
+            gx, gy = self.generate_agent_position()
             human.set(px, py, -gx, -gy, 0, 0, 0)
         # elif still:
         #     human.set(px, py, -human.gx, -human.gy, 0, 0, 0)
@@ -420,11 +602,12 @@ class CrowdSim(gym.Env):
         for human in self.humans:
             # observation for humans is always coordinates
             ob = [other_human.get_observable_state() for other_human in self.humans if other_human != human]
-            temp = [obstacle.get_observable_state() for obstacle in self.obs]
-            ob += temp
+            # temp = [obstacle.get_observable_state() for obstacle in self.obs]
+            # ob += temp
+            self.obstacle_states = [obstacle for obstacle in self.obs]
             if self.robot.visible:
                 ob += [self.robot.get_observable_state()]
-            human_actions.append(human.act(ob))
+            human_actions.append(human.act(ob, self.obstacle_states))
 
         # collision detection
         dmin = float('inf')
@@ -448,29 +631,38 @@ class CrowdSim(gym.Env):
                 break
             elif closest_dist < dmin:
                 dmin = closest_dist
-
-        # for static obstacle collision detection
-        for i, obstacle in enumerate(self.obs):
-            # print("obstacle {0:d}: x: {1:f} y: {2:f}".format(i, obstacle.px, obstacle.py))
-            px = obstacle.px - self.robot.px
-            py = obstacle.py - self.robot.py
-            if self.robot.kinematics == 'holonomic':
-                vx = obstacle.vx - action.vx
-                vy = obstacle.vy - action.vy
-            else:
-                vx = obstacle.vx - action.v * np.cos(action.r + self.robot.theta)
-                vy = obstacle.vy - action.v * np.sin(action.r + self.robot.theta)
-            ex = px + vx * self.time_step
-            ey = py + vy * self.time_step
-            # closest distance between boundaries of two agents
-            closest_dist = point_to_segment_dist(px, py, ex, ey, 0, 0) - obstacle.radius - self.robot.radius
+        
+        for obstacle in self.obs:
+            _, closest_dist = self.is_agent_obstacle_collide(obstacle, agent = self.robot)
             if closest_dist < 0:
                 collision = True
-                # print("Collision!")
                 # logging.debug("Collision: distance between robot and p{} is {:.2E}".format(i, closest_dist))
                 break
             elif closest_dist < dmin:
                 dmin = closest_dist
+            
+        # for static obstacle collision detection
+        # for i, obstacle in enumerate(self.obs):
+        #     # print("obstacle {0:d}: x: {1:f} y: {2:f}".format(i, obstacle.px, obstacle.py))
+        #     px = obstacle.px - self.robot.px
+        #     py = obstacle.py - self.robot.py
+        #     if self.robot.kinematics == 'holonomic':
+        #         vx = obstacle.vx - action.vx
+        #         vy = obstacle.vy - action.vy
+        #     else:
+        #         vx = obstacle.vx - action.v * np.cos(action.r + self.robot.theta)
+        #         vy = obstacle.vy - action.v * np.sin(action.r + self.robot.theta)
+        #     ex = px + vx * self.time_step
+        #     ey = py + vy * self.time_step
+        #     # closest distance between boundaries of two agents
+        #     closest_dist = point_to_segment_dist(px, py, ex, ey, 0, 0) - obstacle.radius - self.robot.radius
+        #     if closest_dist < 0:
+        #         collision = True
+        #         # print("Collision!")
+        #         # logging.debug("Collision: distance between robot and p{} is {:.2E}".format(i, closest_dist))
+        #         break
+        #     elif closest_dist < dmin:
+        #         dmin = closest_dist
 
         # collision detection between humans
         human_num = len(self.humans)
@@ -487,20 +679,10 @@ class CrowdSim(gym.Env):
         end_position = np.array(self.robot.compute_position(action, self.time_step))
         reaching_goal = norm(end_position - np.array(self.robot.get_goal_position())) < self.robot.radius
 
-        ## check if the robot run out of the boundary
-        robot_x, robot_y = self.robot.get_position()
-        out = False
-        if np.abs(robot_x) > self.boundary / 2 or np.abs(robot_y) > self.boundary / 2:
-            out = True
-
         if self.global_time >= self.time_limit - 1:
             reward = 0
             done = True
             info = Timeout()
-        elif out:
-            reward = self.out_boundary_penalty
-            done = True
-            info = Boundary()
         elif collision:
             reward = self.collision_penalty
             done = True
@@ -528,7 +710,7 @@ class CrowdSim(gym.Env):
             for human in self.humans:
                 self.human_reset_goal(human) ## If human already reached its goal state, reset its goal
                     
-            self.states.append([self.robot.get_full_state(), [human.get_full_state() for human in self.humans], [obstacle.get_full_state() for obstacle in self.obs]])
+            self.states.append([self.robot.get_full_state(), [human.get_full_state() for human in self.humans], [obstacle for obstacle in self.obs]])
             if hasattr(self.robot.policy, 'action_values'):
                 self.action_values.append(self.robot.policy.action_values)
             if hasattr(self.robot.policy, 'get_attention_weights'):
@@ -547,8 +729,8 @@ class CrowdSim(gym.Env):
             # compute the observation
             if self.robot.sensor == 'coordinates':
                 ob = [human.get_observable_state() for human in self.humans]
-                temp = [obstacle.get_observable_state() for obstacle in self.obs]
-                ob += temp
+                # temp = [obstacle.get_observable_state() for obstacle in self.obs]
+                # ob += temp
             elif self.robot.sensor == 'RGB':
                 raise NotImplementedError
         else:
@@ -635,14 +817,9 @@ class CrowdSim(gym.Env):
             # goal = mlines.Line2D([0], [4], color=goal_color, marker='*', linestyle='None', markersize=15, label='Goal')
             goal = mlines.Line2D([self.robot_gx], [self.robot_gy], color=goal_color, marker='*', linestyle='None', markersize=15, label='Goal')
             robot = plt.Circle(robot_positions[0], self.robot.radius, fill=True, color=robot_color)
-            boundary = plt.Rectangle((-self.boundary / 2, -self.boundary / 2), self.boundary, self.boundary,
-             edgecolor = 'Blue',
-             fill=False,
-             lw=5)
             ax.add_artist(robot)
             ax.add_artist(goal)
-            ax.add_patch(boundary)
-            plt.legend([robot, goal, boundary], ['Robot', 'Goal', 'Boundary'], fontsize=16)
+            plt.legend([robot, goal], ['Robot', 'Goal'], fontsize=16)
 
             # add humans and their numbers
             human_positions = [[state[1][j].position for j in range(len(self.humans))] for state in self.states]
@@ -656,9 +833,17 @@ class CrowdSim(gym.Env):
 
             ## Add my me
             # add obs and their numbers
-            obs_positions = [[state[2][j].position for j in range(len(self.obs))] for state in self.states]
-            obs = [plt.Circle(obs_positions[0][i], self.obs[i].radius, fill=True, color='black')
-                      for i in range(len(self.obs))]
+            # obs_positions = [[state[2][j].position for j in range(len(self.obs))] for state in self.states]
+            # obs = [plt.Circle(obs_positions[0][i], self.obs[i].radius, fill=True, color='black')
+            #           for i in range(len(self.obs))]
+            obs_positions = [[state[2][j] for j in range(len(self.obs))] for state in self.states]
+            obs_vertices = []
+            for obs_position in obs_positions[0]:
+                obs_type, vertices = obs_position.get_obstacle_state()
+                obs_vertices.append(vertices)
+
+            obs = [plt.Polygon(vertices, fill=True, color='black')
+                      for vertices in obs_vertices]          
             
             for i, ob in enumerate(obs):
                 ax.add_artist(ob)
