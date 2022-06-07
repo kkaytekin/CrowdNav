@@ -68,12 +68,20 @@ def main():
     if args.circle:
         env.test_sim = 'circle_crossing'
     robot = Robot(env_config, 'robot')
+    robot_orca = Robot(env_config, 'robot')
+
+    ref_policy = policy_factory['orca']()
+
     robot.set_policy(policy)
+    robot_orca.set_policy(ref_policy)
+
     env.set_robot(robot)
-    explorer = Explorer(env, robot, device, gamma=0.9)
+    env.set_ref_robot(robot_orca)
 
     policy.set_phase(args.phase)
     policy.set_device(device)
+    ref_policy.set_phase(args.phase)
+    ref_policy.set_device(device)
     # set safety space for ORCA in non-cooperative simulation
     if isinstance(robot.policy, ORCA):
         if robot.visible:
@@ -85,28 +93,28 @@ def main():
         logging.info('ORCA agent buffer: %f', robot.policy.safety_space)
 
     policy.set_env(env)
+    ref_policy.set_env(env)
     robot.print_info()
-    if args.visualize:
-        ob = env.reset(args.phase, args.test_case)
-        done = False
-        last_pos = np.array(robot.get_position())
-        while not done:
-            action = robot.act(ob, env.obstacle_states)
-            ob, _, done, info = env.step(action)
-            current_pos = np.array(robot.get_position())
-            logging.debug('Speed: %.2f', np.linalg.norm(current_pos - last_pos) / robot.time_step)
-            last_pos = current_pos
-        if args.traj:
-            env.render('traj', args.video_file)
-        else:
-            env.render('video', args.video_file)
 
-        logging.info('It takes %.2f seconds to finish. Final status is %s', env.global_time, info)
-        if robot.visible and info == 'reach goal':
-            human_times = env.get_human_times()
-            logging.info('Average time for humans to reach goal: %.2f', sum(human_times) / len(human_times))
+    ob = env.reset(args.phase, args.test_case)
+    done = False
+    last_pos = np.array(robot.get_position())
+    while not done:
+        action = robot.act(ob, env.obstacle_states)
+        _ = robot_orca.act(ob, env.obstacle_states)
+        ob, _, done, info = env.step(action)
+        current_pos = np.array(robot.get_position())
+        logging.debug('Speed: %.2f', np.linalg.norm(current_pos - last_pos) / robot.time_step)
+        last_pos = current_pos
+    if args.traj:
+        env.render('traj', args.video_file)
     else:
-        explorer.run_k_episodes(env.case_size[args.phase], args.phase, print_failure=True)
+        env.render('video', args.video_file)
+
+    logging.info('It takes %.2f seconds to finish. Final status is %s', env.global_time, info)
+    if robot.visible and info == 'reach goal':
+        human_times = env.get_human_times()
+        logging.info('Average time for humans to reach goal: %.2f', sum(human_times) / len(human_times))
 
 
 if __name__ == '__main__':
