@@ -500,7 +500,7 @@ class CrowdSim(gym.Env):
         elif out:
             reward = self.out_boundary_penalty
             done = True
-            info = Boundary()
+            info = Collision()
         elif collision:
             reward = self.collision_penalty
             done = True
@@ -582,18 +582,29 @@ class CrowdSim(gym.Env):
             ax.add_artist(plt.Circle(self.robot.get_position(), self.robot.radius, fill=True, color='r'))
             plt.show()
         elif mode == 'traj':
-            fig, ax = plt.subplots(figsize=(7, 7))
+            fig, ax = plt.subplots(figsize=(10, 10))
             ax.tick_params(labelsize=16)
-            ax.set_xlim(-5, 5)
-            ax.set_ylim(-5, 5)
+            ax.set_xlim(-(self.boundary / 2 + 2), (self.boundary / 2 + 2))
+            ax.set_ylim(-(self.boundary / 2 + 2), (self.boundary / 2 + 2))
             ax.set_xlabel('x(m)', fontsize=16)
             ax.set_ylabel('y(m)', fontsize=16)
 
             robot_positions = [self.states[i][0].position for i in range(len(self.states))]
             human_positions = [[self.states[i][1][j].position for j in range(len(self.humans))]
                                for i in range(len(self.states))]
+            boundary = plt.Rectangle((-self.boundary / 2, -self.boundary / 2), self.boundary, self.boundary,
+             edgecolor = 'Black',
+             fill=False,
+             lw=5)
+            ax.add_artist(boundary)
+            obs_positions = [[state[2][j].position for j in range(len(self.obs))] for state in self.states]
+            obs = [plt.Circle(obs_positions[0][i], self.obs[i].radius, fill=True, color='black')
+                      for i in range(len(self.obs))]
+            
+            for i, ob in enumerate(obs):
+                ax.add_artist(ob)
             for k in range(len(self.states)):
-                if k % 4 == 0 or k == len(self.states) - 1:
+                if k % 10 == 0 or k == len(self.states) - 1:
                     robot = plt.Circle(robot_positions[k], self.robot.radius, fill=True, color=robot_color)
                     humans = [plt.Circle(human_positions[k][i], self.humans[i].radius, fill=False, color=cmap(i))
                               for i in range(len(self.humans))]
@@ -602,7 +613,7 @@ class CrowdSim(gym.Env):
                         ax.add_artist(human)
                 # add time annotation
                 global_time = k * self.time_step
-                if global_time % 4 == 0 or k == len(self.states) - 1:
+                if global_time % 10 == 0 or k == len(self.states) - 1:
                     agents = humans + [robot]
                     times = [plt.text(agents[i].center[0] - x_offset, agents[i].center[1] - y_offset,
                                       '{:.1f}'.format(global_time),
@@ -636,7 +647,7 @@ class CrowdSim(gym.Env):
             goal = mlines.Line2D([self.robot_gx], [self.robot_gy], color=goal_color, marker='*', linestyle='None', markersize=15, label='Goal')
             robot = plt.Circle(robot_positions[0], self.robot.radius, fill=True, color=robot_color)
             boundary = plt.Rectangle((-self.boundary / 2, -self.boundary / 2), self.boundary, self.boundary,
-             edgecolor = 'Blue',
+             edgecolor = 'Black',
              fill=False,
              lw=5)
             ax.add_artist(robot)
