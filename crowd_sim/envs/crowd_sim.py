@@ -597,6 +597,8 @@ class CrowdSim(gym.Env):
              fill=False,
              lw=5)
             ax.add_artist(boundary)
+            goal = mlines.Line2D([self.robot_gx], [self.robot_gy], color=goal_color, marker='*', linestyle='None', markersize=15, label='Goal')
+            ax.add_artist(goal)
             obs_positions = [[state[2][j].position for j in range(len(self.obs))] for state in self.states]
             obs = [plt.Circle(obs_positions[0][i], self.obs[i].radius, fill=True, color='black')
                       for i in range(len(self.obs))]
