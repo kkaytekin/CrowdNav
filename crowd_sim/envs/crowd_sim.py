@@ -821,37 +821,50 @@ class CrowdSim(gym.Env):
             ax.add_artist(plt.Circle(self.robot.get_position(), self.robot.radius, fill=True, color='r'))
             plt.show()
         elif mode == 'traj':
-            fig, ax = plt.subplots(figsize=(7, 7))
+            fig, ax = plt.subplots(figsize=(10, 10))
             ax.tick_params(labelsize=16)
-            ax.set_xlim(-5, 5)
-            ax.set_ylim(-5, 5)
+            ax.set_xlim(-(self.boundary / 2 + 2), (self.boundary / 2 + 2))
+            ax.set_ylim(-(self.boundary / 2 + 2), (self.boundary / 2 + 2))
             ax.set_xlabel('x(m)', fontsize=16)
             ax.set_ylabel('y(m)', fontsize=16)
 
             robot_positions = [self.states[i][0].position for i in range(len(self.states))]
             human_positions = [[self.states[i][1][j].position for j in range(len(self.humans))]
                                for i in range(len(self.states))]
+            goal = mlines.Line2D([self.robot_gx], [self.robot_gy], color=goal_color, marker='*', linestyle='None', markersize=15, label='Goal')
+            ax.add_artist(goal)
+            obs_positions = [[state[2][j] for j in range(len(self.obs))] for state in self.states]
+            obs_vertices = []
+            for obs_position in obs_positions[0]:
+                obs_type, vertices = obs_position.get_rvo2_obstacle_state()
+                obs_vertices.append(vertices)
+
+            obs = [plt.Polygon(vertices, fill=True, color='black')
+                      for vertices in obs_vertices]          
+            
+            for i, ob in enumerate(obs):
+                ax.add_artist(ob)
             for k in range(len(self.states)):
                 if k % 4 == 0 or k == len(self.states) - 1:
-                    robot = plt.Circle(robot_positions[k], self.robot.radius, fill=True, color=robot_color)
+                    robot = plt.Circle(robot_positions[k], self.robot.radius, fill=True, color='red')
                     humans = [plt.Circle(human_positions[k][i], self.humans[i].radius, fill=False, color=cmap(i))
                               for i in range(len(self.humans))]
                     ax.add_artist(robot)
                     for human in humans:
                         ax.add_artist(human)
                 # add time annotation
-                global_time = k * self.time_step
-                if global_time % 4 == 0 or k == len(self.states) - 1:
-                    agents = humans + [robot]
-                    times = [plt.text(agents[i].center[0] - x_offset, agents[i].center[1] - y_offset,
-                                      '{:.1f}'.format(global_time),
-                                      color='black', fontsize=14) for i in range(self.human_num + 1)]
-                    for time in times:
-                        ax.add_artist(time)
+                # global_time = k * self.time_step
+                # if global_time % 4 == 0 or k == len(self.states) - 1:
+                #     agents = humans + [robot]
+                #     times = [plt.text(agents[i].center[0] - x_offset, agents[i].center[1] - y_offset,
+                #                       '{:.1f}'.format(global_time),
+                #                       color='black', fontsize=14) for i in range(self.human_num + 1)]
+                #     for time in times:
+                #         ax.add_artist(time)
                 if k != 0:
                     nav_direction = plt.Line2D((self.states[k - 1][0].px, self.states[k][0].px),
                                                (self.states[k - 1][0].py, self.states[k][0].py),
-                                               color=robot_color, ls='solid')
+                                               color='red', ls='solid')
                     human_directions = [plt.Line2D((self.states[k - 1][1][i].px, self.states[k][1][i].px),
                                                    (self.states[k - 1][1][i].py, self.states[k][1][i].py),
                                                    color=cmap(i), ls='solid')
