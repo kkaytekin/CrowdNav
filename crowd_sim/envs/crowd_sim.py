@@ -469,8 +469,8 @@ class CrowdSim(gym.Env):
                 # print("Collision!")
                 # logging.debug("Collision: distance between robot and p{} is {:.2E}".format(i, closest_dist))
                 break
-            elif closest_dist < dmin:
-                dmin = closest_dist
+            # elif closest_dist < dmin:
+            #     dmin = closest_dist
 
         # collision detection between humans
         human_num = len(self.humans)
@@ -607,25 +607,25 @@ class CrowdSim(gym.Env):
                 ax.add_artist(ob)
             for k in range(len(self.states)):
                 if k % 10 == 0 or k == len(self.states) - 1:
-                    robot = plt.Circle(robot_positions[k], self.robot.radius, fill=True, color=robot_color)
+                    robot = plt.Circle(robot_positions[k], self.robot.radius, fill=True, color='red')
                     humans = [plt.Circle(human_positions[k][i], self.humans[i].radius, fill=False, color=cmap(i))
                               for i in range(len(self.humans))]
                     ax.add_artist(robot)
                     for human in humans:
                         ax.add_artist(human)
-                # add time annotation
-                global_time = k * self.time_step
-                if global_time % 10 == 0 or k == len(self.states) - 1:
-                    agents = humans + [robot]
-                    times = [plt.text(agents[i].center[0] - x_offset, agents[i].center[1] - y_offset,
-                                      '{:.1f}'.format(global_time),
-                                      color='black', fontsize=14) for i in range(self.human_num + 1)]
-                    for time in times:
-                        ax.add_artist(time)
+                # # add time annotation
+                # global_time = k * self.time_step
+                # if global_time % 10 == 0 or k == len(self.states) - 1:
+                #     agents = humans + [robot]
+                #     times = [plt.text(agents[i].center[0] - x_offset, agents[i].center[1] - y_offset,
+                #                       '{:.1f}'.format(global_time),
+                #                       color='black', fontsize=14) for i in range(self.human_num + 1)]
+                #     for time in times:
+                #         ax.add_artist(time)
                 if k != 0:
                     nav_direction = plt.Line2D((self.states[k - 1][0].px, self.states[k][0].px),
                                                (self.states[k - 1][0].py, self.states[k][0].py),
-                                               color=robot_color, ls='solid')
+                                               color='red', ls='solid')
                     human_directions = [plt.Line2D((self.states[k - 1][1][i].px, self.states[k][1][i].px),
                                                    (self.states[k - 1][1][i].py, self.states[k][1][i].py),
                                                    color=cmap(i), ls='solid')
