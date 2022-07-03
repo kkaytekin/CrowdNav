@@ -469,8 +469,8 @@ class CrowdSim(gym.Env):
                 # print("Collision!")
                 # logging.debug("Collision: distance between robot and p{} is {:.2E}".format(i, closest_dist))
                 break
-            # elif closest_dist < dmin:
-            #     dmin = closest_dist
+            elif closest_dist < dmin:
+                dmin = closest_dist
 
         # collision detection between humans
         human_num = len(self.humans)
@@ -516,7 +516,7 @@ class CrowdSim(gym.Env):
             done = False
             info = Danger(dmin)
         else:
-            reward = 0
+            reward = 2 * (-(norm(end_position - np.array(self.robot.get_goal_position()))) + (norm(np.array([robot_x, robot_y]) - np.array(self.robot.get_goal_position()))))
             done = False
             info = Nothing()
 
@@ -683,9 +683,12 @@ class CrowdSim(gym.Env):
 
             # compute attention scores
             if self.attention_weights is not None:
-                attention_scores = [
+                attention_human_scores = [
                     plt.text(10, 5 - 0.6 * i, 'Human {}: {:.2f}'.format(i + 1, self.attention_weights[0][i]),
-                             fontsize=16) for i in range(len(self.humans))]
+                             fontsize=12) for i in range(len(self.humans))]
+                attention_obstacle_scores = [
+                    plt.text(10, 5 - 0.6 * len(self.humans) - 0.6 * i, 'Obstalce {}: {:.2f}'.format(i + 1, self.attention_weights[0][i + len(self.humans)]),
+                             fontsize=12) for i in range(len(self.obs))]
 
             # compute orientation in each step and use arrow to show the direction
             radius = self.robot.radius
@@ -729,7 +732,11 @@ class CrowdSim(gym.Env):
                         ax.add_artist(arrow)
                     if self.attention_weights is not None:
                         human.set_color(str(self.attention_weights[frame_num][i]))
-                        attention_scores[i].set_text('human {}: {:.2f}'.format(i, self.attention_weights[frame_num][i]))
+                        attention_human_scores[i].set_text('human {}: {:.2f}'.format(i, self.attention_weights[frame_num][i]))
+                for i, obstacle in enumerate(obs):
+                    if self.attention_weights is not None:
+                        obstacle.set_color(str(self.attention_weights[frame_num][i + len(self.humans)]))
+                        attention_obstacle_scores[i].set_text('obstacle {}: {:.2f}'.format(i, self.attention_weights[frame_num][i + len(self.humans)]))
 
                 time.set_text('Time: {:.2f}'.format(frame_num * self.time_step))
 
