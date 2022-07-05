@@ -49,6 +49,7 @@ class CrowdSim(gym.Env):
         self.states = None
         self.action_values = None
         self.attention_weights = None
+        self.principal_axes = None
 
     def configure(self, config):
         self.config = config
@@ -334,6 +335,7 @@ class CrowdSim(gym.Env):
             self.robot_gx, self.robot_gy = self.generate_agent_goal()
             # self.robot.set(0, -self.circle_radius, 0, self.circle_radius, 0, 0, np.pi / 2)
             self.robot.set(-self.robot_gx, -self.robot_gy, self.robot_gx, self.robot_gy, 0, 0, np.pi / 2)
+            self.principal_axis = np.array([self.robot_gx - self.robot.px, self.robot_gy - self.robot.py])
             if self.case_counter[phase] >= 0:
                 np.random.seed(counter_offset[phase] + self.case_counter[phase])
                 ## Geneate static obstacles first
@@ -365,6 +367,7 @@ class CrowdSim(gym.Env):
             agent.policy.time_step = self.time_step
 
         self.states = list()
+        self.principal_axes = list()
         if hasattr(self.robot.policy, 'action_values'):
             self.action_values = list()
         if hasattr(self.robot.policy, 'get_attention_weights'):
@@ -416,6 +419,9 @@ class CrowdSim(gym.Env):
         Compute actions for all agents, detect collision, update environment and return (ob, reward, done, info)
 
         """
+        principal_axis = np.array([self.robot_gx - self.robot.px, self.robot_gy - self.robot.py])
+        self.principal_axes.append(principal_axis)
+        # print("The pricipal axis is now ({}, {})".format(self.principal_axis[0], self.principal_axis[1]))
         human_actions = []
         for human in self.humans:
             # observation for humans is always coordinates
@@ -742,20 +748,36 @@ class CrowdSim(gym.Env):
 
             def plot_value_heatmap():
                 assert self.robot.kinematics == 'holonomic'
-                for agent in [self.states[global_step][0]] + self.states[global_step][1]:
-                    print(('{:.4f}, ' * 6 + '{:.4f}').format(agent.px, agent.py, agent.gx, agent.gy,
-                                                             agent.vx, agent.vy, agent.theta))
+                for agent in [self.states[global_step][0]] + self.states[global_step][1] + self.states[global_step][2]:
+                    print(('{:.4f}, ' * 7 + '{:.4f}').format(agent.px, agent.py, agent.gx, agent.gy,
+                                                             agent.vx, agent.vy, agent.theta, agent.radius))
                 # when any key is pressed draw the action value plot
                 fig, axis = plt.subplots()
                 speeds = [0] + self.robot.policy.speeds
-                rotations = self.robot.policy.rotations + [np.pi * 2]
+                # speeds = self.robot.policy.speeds
+                # print(speeds)
+                rotations = np.append(self.robot.policy.rotations, np.pi * 2)
+                # angle_offset = np.arctan2(self.principal_axis[1], self.principal_axis[0])
+                principal_axis = self.principal_axes[global_step]
+                angle_offset = np.arctan2(principal_axis[1], principal_axis[0])
+                # print("The principal axis's angle is: {}".format(angle_offset / np.pi * 180))
+                rotations = rotations - angle_offset
+                # print(rotations)
                 r, th = np.meshgrid(speeds, rotations)
+                # print(r)
+                # print(th)
+                # z = np.array(self.action_values[global_step % len(self.states)][1:])
                 z = np.array(self.action_values[global_step % len(self.states)][1:])
-                z = (z - np.min(z)) / (np.max(z) - np.min(z))
-                z = np.reshape(z, (16, 5))
+                # print(z)
+                # z = (z - np.min(z)) / (np.max(z) - np.min(z))
+                # print(z.shape)
+                # print(len(rotations))
+                z = np.reshape(z, (len(rotations) - 1, len(speeds) - 1))
+                # print(z)
                 polar = plt.subplot(projection="polar")
                 polar.tick_params(labelsize=16)
-                mesh = plt.pcolormesh(th, r, z, vmin=0, vmax=1)
+                mesh = plt.pcolormesh(th, r, z, vmin=0, vmax=np.max(z))
+                # print(mesh)
                 plt.plot(rotations, r, color='k', ls='none')
                 plt.grid()
                 cbaxes = fig.add_axes([0.85, 0.1, 0.03, 0.8])
