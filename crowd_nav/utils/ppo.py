@@ -72,7 +72,7 @@ class PPO:
                 delta = batch_rewards[i] + self.gamma * V[i + 1] * masks[i] - V[i]
                 gae = delta + self.gamma * self.lmbda * masks[i] * gae
                 returns.insert(0, gae + V[i])
-            A_k = torch.FloatTensor(returns) - V[:-1]
+            A_k = torch.FloatTensor(returns).to(self.device) - V[:-1]
         # Normalize advantages
         A_k = (A_k - A_k.mean()) / (A_k.std() + 1e-10)
 
@@ -113,7 +113,7 @@ class PPO:
                 loss.mean().backward()
                 self.optimizer.step()
 
-                self.logger['actor_losses'].append(loss.detach())
+                self.logger['actor_losses'].append(loss.detach().cpu().numpy())
 
             # Calculate how many timesteps we collected this batch   
             t += np.sum(batch_lens)
@@ -245,7 +245,7 @@ class PPO:
             log_prob = dist.log_prob(action)
 
 
-        return action.detach().numpy(), log_prob.detach()
+        return action.detach().cpu().numpy(), log_prob.detach()
 
     def compute_rewards_to_go(self, batch_rewards):
         batch_rewards_to_go = []
@@ -298,7 +298,7 @@ class PPO:
         epoch = self.logger['epoch']
         avg_ep_lens = np.mean(self.logger['batch_lens'])
         avg_ep_rews = np.mean([np.sum(ep_rews) for ep_rews in self.logger['batch_rews']])
-        avg_actor_critic_loss = np.mean([losses.float().mean() for losses in self.logger['actor_losses']])
+        avg_actor_critic_loss = np.mean([losses.mean() for losses in self.logger['actor_losses']])
 
         # Round decimal places for more aesthetic logging messages
         avg_ep_lens = str(round(avg_ep_lens, 2))
