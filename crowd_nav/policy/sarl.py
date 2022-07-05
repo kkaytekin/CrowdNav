@@ -1,3 +1,4 @@
+from xml import dom
 import torch
 import torch.nn as nn
 from torch.nn.functional import softmax
@@ -153,7 +154,7 @@ class ActorCriticNetwork(nn.Module):
         self.attention_weights = None
         # self.tanh = nn.Tanh()
         # print(mlp3_dims[-1])
-        self.softmax = nn.Softmax()
+        self.softmax = nn.Softmax(dim = 1)
 
     def forward(self, state):
         """
@@ -248,7 +249,7 @@ class SARL_PPO(MultiHumanRL):
         mlp2_dims = [int(x) for x in config.get('sarl_ppo', 'mlp2_dims').split(', ')]
         mlp3_dims = [int(x) for x in config.get('sarl_ppo', 'mlp3_dims').split(', ')]
         mlp3_actor_dims = mlp3_dims.copy()
-        mlp3_actor_dims[-1] = self.speed_samples * self.rotation_samples + 1
+        mlp3_actor_dims[-1] = (self.speed_samples * self.rotation_samples + 1 ) + 1
         attention_dims = [int(x) for x in config.get('sarl_ppo', 'attention_dims').split(', ')]
         self.with_om = config.getboolean('sarl_ppo', 'with_om')
         with_global_state = config.getboolean('sarl_ppo', 'with_global_state')

@@ -27,6 +27,7 @@ def main():
     parser.add_argument('--gpu', default=False, action='store_true')
     parser.add_argument('--debug', default=False, action='store_true')
     parser.add_argument('--timesteps', type=int, default=1000000)
+    
     args = parser.parse_args()
 
     # configure paths
@@ -80,6 +81,8 @@ def main():
     robot = Robot(env_config, 'robot')
     env.set_robot(robot)
 
+    train_config = configparser.RawConfigParser()
+    train_config.read(args.train_config)
     # actor_weight_file = os.path.join(args.output_dir, 'actor_model.pth')
     # critic_weight_file = os.path.join(args.output_dir, 'critic_model.pth')
     actor_critic_weight_file = os.path.join(args.output_dir, 'actor_critic_model.pth')
@@ -93,7 +96,7 @@ def main():
             policy.actor_critic.load_state_dict(torch.load(actor_critic_weight_file))
             logging.info('Load actor/critic learning trained weights. Resume training')
 
-    ppo = PPO(robot, env, policy, args.output_dir)
+    ppo = PPO(train_config, robot, env, policy, args.output_dir, device)
     ppo.learn(args.timesteps)
 
 if __name__ == '__main__':
