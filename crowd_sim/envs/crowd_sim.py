@@ -9,7 +9,7 @@ from numpy.linalg import norm
 from crowd_sim.envs.utils.human import Human
 from crowd_sim.envs.utils.info import *
 from crowd_sim.envs.utils.utils import point_to_segment_dist
-
+# from crowd_sim.envs.utils.state import ObservableState, FullState
 
 class CrowdSim(gym.Env):
     metadata = {'render.modes': ['human']}
@@ -27,6 +27,7 @@ class CrowdSim(gym.Env):
         self.robot = None
         self.humans = None
         self.obs = None
+        self.bd = None
         self.global_time = None
         self.human_times = None
         # reward function
@@ -61,6 +62,7 @@ class CrowdSim(gym.Env):
         self.discomfort_dist = config.getfloat('reward', 'discomfort_dist')
         self.discomfort_penalty_factor = config.getfloat('reward', 'discomfort_penalty_factor')
         self.out_boundary_penalty = config.getfloat('reward', 'out_boundary_penalty')
+        self.timeout_penalty = config.getfloat('reward', 'timeout_penalty')
         if self.config.get('humans', 'policy') == 'orca':
             self.case_capacity = {'train': np.iinfo(np.uint32).max - 2000, 'val': 1000, 'test': 1000}
             self.case_size = {'train': np.iinfo(np.uint32).max - 2000, 'val': config.getint('env', 'val_size'),
@@ -77,6 +79,7 @@ class CrowdSim(gym.Env):
             self.obstacle_min_radius = config.getfloat('sim', 'obstacle_min_radius')
 
             self.boundary = config.getfloat('sim', 'boundary')
+            self.heatmap_robot_centric = config.getboolean('sim', 'heatmap_robot_centric')
         else:
             raise NotImplementedError
         self.case_counter = {'train': 0, 'test': 0, 'val': 0}
@@ -335,6 +338,7 @@ class CrowdSim(gym.Env):
             self.robot_gx, self.robot_gy = self.generate_agent_goal()
             # self.robot.set(0, -self.circle_radius, 0, self.circle_radius, 0, 0, np.pi / 2)
             self.robot.set(-self.robot_gx, -self.robot_gy, self.robot_gx, self.robot_gy, 0, 0, np.pi / 2)
+            self.bd = self.initialize_boundary_observation(self.robot.px, self.robot.py, self.robot.radius)
             self.principal_axis = np.array([self.robot_gx - self.robot.px, self.robot_gy - self.robot.py])
             if self.case_counter[phase] >= 0:
                 np.random.seed(counter_offset[phase] + self.case_counter[phase])
@@ -380,6 +384,8 @@ class CrowdSim(gym.Env):
             ob = [human.get_observable_state() for human in self.humans]
             temp = [obstacle.get_observable_state() for obstacle in self.obs]
             ob += temp
+            temp = [bd.get_observable_state() for bd in self.bd]
+            ob += temp
         elif self.robot.sensor == 'RGB':
             raise NotImplementedError
 
@@ -414,6 +420,40 @@ class CrowdSim(gym.Env):
         # elif still:
         #     human.set(px, py, -human.gx, -human.gy, 0, 0, 0)
 
+    ## Find out there is no proper represetation for the boundary
+    ## So I build this temporarily to see the intermediate result
+    def initialize_boundary_observation(self, x, y, r):
+        '''
+        -----1-----
+        |         |
+        2         4
+        |         |
+        -----3-----
+        '''
+        bd1 = Human(self.config, 'humans')
+        bd2 = Human(self.config, 'humans')
+        bd3 = Human(self.config, 'humans')
+        bd4 = Human(self.config, 'humans')
+        bd1.set(x, self.boundary / 2, x, self.boundary / 2, 0, 0, 0, r, 0)
+        bd2.set(-self.boundary / 2, y, -self.boundary / 2, y, 0, 0, 0, r, 0)
+        bd3.set(x, -self.boundary / 2, x, -self.boundary / 2, 0, 0, 0, r, 0)
+        bd4.set(self.boundary / 2, y, self.boundary / 2, y, 0, 0, 0, r, 0)
+
+        return [bd1, bd2, bd3, bd4]
+    def compute_boundary_observation(self, x, y, r):
+        '''
+        -----0-----
+        |         |
+        1         3
+        |         |
+        -----2-----
+        '''
+        
+        self.bd[0].set(x, self.boundary / 2, x, self.boundary / 2, 0, 0, 0, r, 0)
+        self.bd[1].set(-self.boundary / 2, y, -self.boundary / 2, y, 0, 0, 0, r, 0)
+        self.bd[2].set(x, -self.boundary / 2, x, -self.boundary / 2, 0, 0, 0, r, 0)
+        self.bd[3].set(self.boundary / 2, y, self.boundary / 2, y, 0, 0, 0, r, 0)
+
     def step(self, action, update=True):
         """
         Compute actions for all agents, detect collision, update environment and return (ob, reward, done, info)
@@ -421,6 +461,7 @@ class CrowdSim(gym.Env):
         """
         principal_axis = np.array([self.robot_gx - self.robot.px, self.robot_gy - self.robot.py])
         self.principal_axes.append(principal_axis)
+        self.compute_boundary_observation(self.robot.px, self.robot.py, self.robot.radius)
         # print("The pricipal axis is now ({}, {})".format(self.principal_axis[0], self.principal_axis[1]))
         human_actions = []
         for human in self.humans:
@@ -496,11 +537,11 @@ class CrowdSim(gym.Env):
         ## check if the robot run out of the boundary
         robot_x, robot_y = self.robot.get_position()
         out = False
-        if np.abs(robot_x) > self.boundary / 2 or np.abs(robot_y) > self.boundary / 2:
+        if np.abs(end_position[0]) > self.boundary / 2 - self.robot.radius or np.abs(end_position[1]) > self.boundary / 2 - self.robot.radius:
             out = True
 
         if self.global_time >= self.time_limit - 1:
-            reward = 0
+            reward = self.timeout_penalty
             done = True
             info = Timeout()
         elif out:
@@ -534,7 +575,7 @@ class CrowdSim(gym.Env):
             for human in self.humans:
                 self.human_reset_goal(human) ## If human already reached its goal state, reset its goal
                     
-            self.states.append([self.robot.get_full_state(), [human.get_full_state() for human in self.humans], [obstacle.get_full_state() for obstacle in self.obs]])
+            self.states.append([self.robot.get_full_state(), [human.get_full_state() for human in self.humans], [obstacle.get_full_state() for obstacle in self.obs], [bd.get_full_state() for bd in self.bd]])
             if hasattr(self.robot.policy, 'action_values'):
                 self.action_values.append(self.robot.policy.action_values)
             if hasattr(self.robot.policy, 'get_attention_weights'):
@@ -554,6 +595,8 @@ class CrowdSim(gym.Env):
             if self.robot.sensor == 'coordinates':
                 ob = [human.get_observable_state() for human in self.humans]
                 temp = [obstacle.get_observable_state() for obstacle in self.obs]
+                ob += temp
+                temp = [bd.get_observable_state() for bd in self.bd]
                 ob += temp
             elif self.robot.sensor == 'RGB':
                 raise NotImplementedError
@@ -598,11 +641,19 @@ class CrowdSim(gym.Env):
             robot_positions = [self.states[i][0].position for i in range(len(self.states))]
             human_positions = [[self.states[i][1][j].position for j in range(len(self.humans))]
                                for i in range(len(self.states))]
-            boundary = plt.Rectangle((-self.boundary / 2, -self.boundary / 2), self.boundary, self.boundary,
-             edgecolor = 'Black',
-             fill=False,
-             lw=5)
-            ax.add_artist(boundary)
+            # boundary = plt.Rectangle((-self.boundary / 2, -self.boundary / 2), self.boundary, self.boundary,
+            #  edgecolor = 'Black',
+            #  fill=False,
+            #  lw=5)
+            width = 0.2
+            bd1 = plt.Rectangle((-self.boundary / 2 - width, self.boundary / 2), self.boundary + 2 * width, width, color = 'Black', fill=True)
+            bd2 = plt.Rectangle((-self.boundary / 2 - width, -self.boundary / 2), width, self.boundary, color = 'Black', fill=True)
+            bd3 = plt.Rectangle((-self.boundary / 2 - width, -self.boundary / 2 - width), self.boundary + 2 * width, 0.2, color = 'Black', fill=True)
+            bd4 = plt.Rectangle((self.boundary / 2, -self.boundary / 2), width, self.boundary, color = 'Black', fill=True)
+            ax.add_artist(bd1)
+            ax.add_artist(bd2)
+            ax.add_artist(bd3)
+            ax.add_artist(bd4)
             goal = mlines.Line2D([self.robot_gx], [self.robot_gy], color=goal_color, marker='*', linestyle='None', markersize=15, label='Goal')
             ax.add_artist(goal)
             obs_positions = [[state[2][j].position for j in range(len(self.obs))] for state in self.states]
@@ -654,14 +705,30 @@ class CrowdSim(gym.Env):
             # goal = mlines.Line2D([0], [4], color=goal_color, marker='*', linestyle='None', markersize=15, label='Goal')
             goal = mlines.Line2D([self.robot_gx], [self.robot_gy], color=goal_color, marker='*', linestyle='None', markersize=15, label='Goal')
             robot = plt.Circle(robot_positions[0], self.robot.radius, fill=True, color=robot_color)
-            boundary = plt.Rectangle((-self.boundary / 2, -self.boundary / 2), self.boundary, self.boundary,
-             edgecolor = 'Black',
-             fill=False,
-             lw=5)
+            # boundary = plt.Rectangle((-self.boundary / 2, -self.boundary / 2), self.boundary, self.boundary,
+            #  edgecolor = 'Black',
+            #  fill=False,
+            #  lw=5)
             ax.add_artist(robot)
             ax.add_artist(goal)
-            ax.add_patch(boundary)
-            plt.legend([robot, goal, boundary], ['Robot', 'Goal', 'Boundary'], fontsize=16)
+            width = 0.2
+            bd1 = plt.Rectangle((-self.boundary / 2 - width, self.boundary / 2), self.boundary + 2 * width, width, color = 'Black', fill=True)
+            bd2 = plt.Rectangle((-self.boundary / 2 - width, -self.boundary / 2), width, self.boundary, color = 'Black', fill=True)
+            bd3 = plt.Rectangle((-self.boundary / 2 - width, -self.boundary / 2 - width), self.boundary + 2 * width, 0.2, color = 'Black', fill=True)
+            bd4 = plt.Rectangle((self.boundary / 2, -self.boundary / 2), width, self.boundary, color = 'Black', fill=True)
+            bd1_num = plt.text(bd1.get_x() + bd1.get_width() / 2 - x_offset, bd1.get_y() + bd1.get_height() / 2 + width, "bd0", color='black', fontsize=12)
+            bd2_num = plt.text(bd2.get_x() + bd2.get_width() / 2 - x_offset - 5 * width, bd2.get_y() + bd2.get_height() / 2, "bd1", color='black', fontsize=12)
+            bd3_num = plt.text(bd3.get_x() + bd3.get_width() / 2 - x_offset, bd3.get_y() + bd3.get_height() / 2 - 3 * width, "bd2", color='black', fontsize=12)
+            bd4_num = plt.text(bd4.get_x() + bd4.get_width() / 2 - x_offset + 2 * width, bd4.get_y() + bd4.get_height() / 2, "bd3", color='black', fontsize=12)
+            ax.add_artist(bd1)
+            ax.add_artist(bd2)
+            ax.add_artist(bd3)
+            ax.add_artist(bd4)
+            ax.add_artist(bd1_num)
+            ax.add_artist(bd2_num)
+            ax.add_artist(bd3_num)
+            ax.add_artist(bd4_num)
+            plt.legend([robot, goal], ['Robot', 'Goal'], fontsize=16)
 
             # add humans and their numbers
             human_positions = [[state[1][j].position for j in range(len(self.humans))] for state in self.states]
@@ -678,10 +745,12 @@ class CrowdSim(gym.Env):
             obs_positions = [[state[2][j].position for j in range(len(self.obs))] for state in self.states]
             obs = [plt.Circle(obs_positions[0][i], self.obs[i].radius, fill=True, color='black')
                       for i in range(len(self.obs))]
+            obs_numbers = [plt.text(obs[i].center[0] - x_offset, obs[i].center[1] - y_offset, str(i),
+                                      color='white', fontsize=12) for i in range(len(self.obs))]
             
             for i, ob in enumerate(obs):
                 ax.add_artist(ob)
-                # ax.add_artist(human_numbers[i])
+                ax.add_artist(obs_numbers[i])
 
             # add time annotation
             time = plt.text(-1, 8.5, 'Time: {}'.format(0), fontsize=16)
@@ -690,11 +759,14 @@ class CrowdSim(gym.Env):
             # compute attention scores
             if self.attention_weights is not None:
                 attention_human_scores = [
-                    plt.text(10, 5 - 0.6 * i, 'Human {}: {:.2f}'.format(i + 1, self.attention_weights[0][i]),
+                    plt.text(10.5, 5 - 0.6 * i, 'Human {}: {:.2f}'.format(i + 1, self.attention_weights[0][i]),
                              fontsize=12) for i in range(len(self.humans))]
                 attention_obstacle_scores = [
-                    plt.text(10, 5 - 0.6 * len(self.humans) - 0.6 * i, 'Obstalce {}: {:.2f}'.format(i + 1, self.attention_weights[0][i + len(self.humans)]),
+                    plt.text(10.5, 5 - 0.6 * len(self.humans) - 0.6 * i, 'Obstalce {}: {:.2f}'.format(i + 1, self.attention_weights[0][i + len(self.humans)]),
                              fontsize=12) for i in range(len(self.obs))]
+                attention_boundary_scores = [
+                    plt.text(10.5, 5 - 0.6 * (len(self.humans) + len(self.obs)) - 0.6 * i, 'Boundary {}: {:.2f}'.format(i + 1, self.attention_weights[0][i + len(self.humans) + len(self.obs)]),
+                             fontsize=12) for i in range(len(self.bd))]
 
             # compute orientation in each step and use arrow to show the direction
             radius = self.robot.radius
@@ -743,6 +815,16 @@ class CrowdSim(gym.Env):
                     if self.attention_weights is not None:
                         obstacle.set_color(str(self.attention_weights[frame_num][i + len(self.humans)]))
                         attention_obstacle_scores[i].set_text('obstacle {}: {:.2f}'.format(i, self.attention_weights[frame_num][i + len(self.humans)]))
+                if self.attention_weights is not None:
+                    bd4.set_color(str(self.attention_weights[frame_num][-1]))
+                    bd3.set_color(str(self.attention_weights[frame_num][-2]))
+                    bd2.set_color(str(self.attention_weights[frame_num][-3]))
+                    bd1.set_color(str(self.attention_weights[frame_num][-4]))
+                    attention_boundary_scores[0].set_text('boundary {}: {:.2f}'.format(0, self.attention_weights[frame_num][-4]))
+                    attention_boundary_scores[1].set_text('boundary {}: {:.2f}'.format(1, self.attention_weights[frame_num][-3]))
+                    attention_boundary_scores[2].set_text('boundary {}: {:.2f}'.format(2, self.attention_weights[frame_num][-2]))
+                    attention_boundary_scores[3].set_text('boundary {}: {:.2f}'.format(3, self.attention_weights[frame_num][-1]))
+
 
                 time.set_text('Time: {:.2f}'.format(frame_num * self.time_step))
 
@@ -759,7 +841,10 @@ class CrowdSim(gym.Env):
                 rotations = np.append(self.robot.policy.rotations, np.pi * 2)
                 # angle_offset = np.arctan2(self.principal_axis[1], self.principal_axis[0])
                 principal_axis = self.principal_axes[global_step]
-                angle_offset = np.arctan2(principal_axis[1], principal_axis[0])
+                if self.heatmap_robot_centric:
+                    angle_offset = np.arctan2(principal_axis[1], principal_axis[0])
+                else:
+                    angle_offset = 0
                 # print("The principal axis's angle is: {}".format(angle_offset / np.pi * 180))
                 rotations = rotations - angle_offset
                 # print(rotations)
