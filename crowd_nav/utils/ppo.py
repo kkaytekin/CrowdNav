@@ -164,6 +164,7 @@ class PPO:
                 
                 batch_states = torch.cat([torch.Tensor([state.self_state + human_state]).to(self.model.device)
                                               for human_state in state.human_states], dim=0)
+                # print(batch_states)
                 rotated_batch_input = self.model.rotate(batch_states).unsqueeze(0)
                 rotated_batch_input = rotated_batch_input.to(self.device)
 
@@ -205,7 +206,7 @@ class PPO:
                 if done: ## Either the episode ends or finishes, we break the for loop
                     break
             ## For debugging
-            if self.render and (self.logger['itr'] % self.render_every_i == 0) and len(batch_lens) == 0:
+            if self.render and (self.logger['epoch'] % self.render_every_i == 0) and len(batch_lens) == 0:
                 self.env.render('video')
 
             ## Collect episodic length and rewards
