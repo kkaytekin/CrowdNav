@@ -759,13 +759,13 @@ class CrowdSim(gym.Env):
             # compute attention scores
             if self.attention_weights is not None:
                 attention_human_scores = [
-                    plt.text(10.5, 5 - 0.6 * i, 'Human {}: {:.2f}'.format(i + 1, self.attention_weights[0][i]),
+                    plt.text(10.5, 10 - 0.6 * i, 'Human {}: {:.2f}'.format(i + 1, self.attention_weights[0][i]),
                              fontsize=12) for i in range(len(self.humans))]
                 attention_obstacle_scores = [
-                    plt.text(10.5, 5 - 0.6 * len(self.humans) - 0.6 * i, 'Obstalce {}: {:.2f}'.format(i + 1, self.attention_weights[0][i + len(self.humans)]),
+                    plt.text(10.5, 10 - 0.6 * len(self.humans) - 0.6 * i, 'Obstalce {}: {:.2f}'.format(i + 1, self.attention_weights[0][i + len(self.humans)]),
                              fontsize=12) for i in range(len(self.obs))]
                 attention_boundary_scores = [
-                    plt.text(10.5, 5 - 0.6 * (len(self.humans) + len(self.obs)) - 0.6 * i, 'Boundary {}: {:.2f}'.format(i + 1, self.attention_weights[0][i + len(self.humans) + len(self.obs)]),
+                    plt.text(10.5, 10 - 0.6 * (len(self.humans) + len(self.obs)) - 0.6 * i, 'Boundary {}: {:.2f}'.format(i + 1, self.attention_weights[0][i + len(self.humans) + len(self.obs)]),
                              fontsize=12) for i in range(len(self.bd))]
 
             # compute orientation in each step and use arrow to show the direction
@@ -852,7 +852,11 @@ class CrowdSim(gym.Env):
                 # print(r)
                 # print(th)
                 # z = np.array(self.action_values[global_step % len(self.states)][1:])
-                z = np.array(self.action_values[global_step % len(self.states)][1:])
+                if len(self.action_values[global_step % len(self.states)]) == (len(rotations) - 1) * (len(speeds) - 1):
+                    z = np.array(self.action_values[global_step % len(self.states)])
+                else:
+                    z = np.array(self.action_values[global_step % len(self.states)][1:])
+                
                 # print(z)
                 # z = (z - np.min(z)) / (np.max(z) - np.min(z))
                 # print(z.shape)

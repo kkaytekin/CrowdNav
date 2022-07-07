@@ -100,7 +100,7 @@ def main():
     robot.print_info()
     
     train_config = configparser.RawConfigParser()
-    train_config.read(args.train_config)
+    train_config.read(train_config_file)
 
     with_constant_speed = train_config.getboolean('ppo', 'with_constant_speed')
     gamma = train_config.getfloat('ppo', 'gamma')

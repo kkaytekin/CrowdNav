@@ -14,6 +14,7 @@ from crowd_nav.utils.memory import ReplayMemory
 from crowd_nav.utils.explorer import Explorer
 from crowd_nav.policy.policy_factory import policy_factory
 from crowd_nav.utils.ppo import PPO
+import re
 
 def main():
     parser = argparse.ArgumentParser('Parse configuration file')
@@ -86,18 +87,31 @@ def main():
     # actor_weight_file = os.path.join(args.output_dir, 'actor_model.pth')
     # critic_weight_file = os.path.join(args.output_dir, 'critic_model.pth')
     actor_critic_weight_file = os.path.join(args.output_dir, 'actor_critic_model.pth')
+    output_log_file = os.path.join(args.output_dir, 'output.log')
     # reinforcement learning
     if args.resume:
-        if not os.path.exists(actor_critic_weight_file):
-            logging.error('actor/critic weights does not exist')
+        if not os.path.exists(actor_critic_weight_file) or not os.path.exists(output_log_file):
+            logging.error('actor/critic weights and previous output log does not exist')
             # policy.actor.load_state_dict(torch.load(actor_weight_file))
             # policy.critic.load_state_dict(torch.load(critic_weight_file))
         else:
             policy.actor_critic.load_state_dict(torch.load(actor_critic_weight_file))
             logging.info('Load actor/critic learning trained weights. Resume training')
+            print(output_log_file)
+            with open(output_log_file, 'r') as file:
+                log = file.read()
+            
+            train_pattern = r"TRAIN in epoch (?P<epoch>\d+) has avg. loss: (?P<loss>\d+.\d+), " \
+                            r"avg. episodic return: (?P<reward>[-+]?\d+.\d+), timesteps accumulated: (?P<timesteps>\d+)"
+            train_epoch = []
+            for r in re.findall(train_pattern, log):
+                train_epoch.append(int(r[0]))
+            num_policy_itr = train_epoch[-1]
+
+
 
     ppo = PPO(train_config, robot, env, policy, args.output_dir, device)
-    ppo.learn(args.timesteps)
+    ppo.learn(args.timesteps, num_policy_itr)
 
 if __name__ == '__main__':
     main()

@@ -78,9 +78,13 @@ class PPO:
 
         return A_k
     
-    def learn(self, total_time_steps):
+    def learn(self, total_time_steps, itr_start_from = None):
         t = 0 # Time steps which we have generated so far
-        epoch = 0 
+        if itr_start_from is not None:
+            epoch = itr_start_from
+        else:
+            epoch = 0
+
         while t < total_time_steps:
             ## Algorithm Step 3
             batch_obs, batch_acts, batch_log_probs, batch_rtgs, batch_lens, batch_rewards, batch_masks = self.rollout()
