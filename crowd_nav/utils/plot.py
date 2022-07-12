@@ -28,12 +28,18 @@ def main():
         ax2_legends = []
         ax3_legends = []
         ax4_legends = []
+        # print(args.log_files)
         for i, log_file in enumerate(args.log_files):
             with open(log_file, 'r') as file:
                 log = file.read()
             
             train_pattern = r"TRAIN in epoch (?P<epoch>\d+) has avg. loss: (?P<loss>\d+.\d+), " \
                             r"avg. episodic return: (?P<reward>[-+]?\d+.\d+), timesteps accumulated: (?P<timesteps>\d+)"
+            parameter_pattern = r"(\w+) GAE"
+            use_gae = True
+            for r in re.findall(parameter_pattern, log):
+                if r == "Deactivate":
+                    use_gae = False
             train_epoch = []
             train_loss = []
             train_reward = []
@@ -48,21 +54,27 @@ def main():
             train_reward_smooth = running_mean(train_reward, args.window_size)
             if ax1 is None:
                 _, ax1 = plt.subplots()
-                ax1.plot(range(len(train_loss_smooth)), train_loss_smooth)
-                ax1_legends.append(models)
-                ax1.legend(ax1_legends)
-                ax1.set_xlabel('Policy Iterations')
-                ax1.set_ylabel('Loss')
-                ax1.set_title('Average Loss')
+            ax1.plot(range(len(train_loss_smooth)), train_loss_smooth)
+            if use_gae:
+                ax1_legends.append(models + " w/ GAE")
+            else:
+                ax1_legends.append(models + " w/o GAE")
+            ax1.legend(ax1_legends)
+            ax1.set_xlabel('Policy Iterations')
+            ax1.set_ylabel('Loss')
+            ax1.set_title('Average Loss')
             
             if ax2 is None:
                 _, ax2 = plt.subplots()
-                ax2.plot(range(len(train_reward_smooth)), train_reward_smooth)
-                ax2_legends.append(models)
-                ax2.legend(ax2_legends)
-                ax2.set_xlabel('Policy Iterations')
-                ax2.set_ylabel('Reward')
-                ax2.set_title('Average Episodic Return')
+            ax2.plot(range(len(train_reward_smooth)), train_reward_smooth)
+            if use_gae:
+                ax2_legends.append(models + " w/ GAE")
+            else:
+                ax2_legends.append(models + " w/o GAE")
+            ax2.legend(ax2_legends)
+            ax2.set_xlabel('Policy Iterations')
+            ax2.set_ylabel('Reward')
+            ax2.set_title('Average Episodic Return')
         
     else:
         # define the names of the models you want to plot and the longest episodes you want to show

@@ -842,9 +842,9 @@ class CrowdSim(gym.Env):
                 # angle_offset = np.arctan2(self.principal_axis[1], self.principal_axis[0])
                 principal_axis = self.principal_axes[global_step]
                 if self.heatmap_robot_centric:
-                    angle_offset = np.arctan2(principal_axis[1], principal_axis[0])
+                    angle_offset = np.arctan2(principal_axis[1], principal_axis[0]) + (rotations[1] - rotations[0]) / 2
                 else:
-                    angle_offset = 0
+                    angle_offset = (rotations[1] - rotations[0]) / 2
                 # print("The principal axis's angle is: {}".format(angle_offset / np.pi * 180))
                 rotations = rotations - angle_offset
                 # print(rotations)
@@ -865,7 +865,7 @@ class CrowdSim(gym.Env):
                 # print(z)
                 polar = plt.subplot(projection="polar")
                 polar.tick_params(labelsize=16)
-                mesh = plt.pcolormesh(th, r, z, vmin=0, vmax=np.max(z))
+                mesh = plt.pcolormesh(th, r, z, vmin=0, vmax=np.max(np.array(self.action_values[global_step % len(self.states)])))
                 # print(mesh)
                 plt.plot(rotations, r, color='k', ls='none')
                 plt.grid()

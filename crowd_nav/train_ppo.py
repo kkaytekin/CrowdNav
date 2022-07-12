@@ -89,6 +89,7 @@ def main():
     actor_critic_weight_file = os.path.join(args.output_dir, 'actor_critic_model.pth')
     output_log_file = os.path.join(args.output_dir, 'output.log')
     # reinforcement learning
+    num_policy_itr = None
     if args.resume:
         if not os.path.exists(actor_critic_weight_file) or not os.path.exists(output_log_file):
             logging.error('actor/critic weights and previous output log does not exist')
