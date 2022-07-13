@@ -19,7 +19,7 @@ class Explorer(object):
 
     # @profile
     def run_k_episodes(self, k, phase, update_memory=False, imitation_learning=False, episode=None,
-                       print_failure=False):
+                       print_failure=False, dqn = False):
         self.robot.policy.set_phase(phase)
         success_times = []
         collision_times = []
@@ -35,6 +35,7 @@ class Explorer(object):
         for i in range(k):
             ob = self.env.reset(phase)
             done = False
+            dones = []
             states = []
             actions = []
             rewards = []
@@ -42,7 +43,11 @@ class Explorer(object):
                 action = self.robot.act(ob)
                 ob, reward, done, info = self.env.step(action)
                 states.append(self.robot.policy.last_state)
-                actions.append(action)
+                if not dqn:
+                    actions.append(action)
+                else:
+                    actions.append(self.robot.policy.get_max_action_id())
+                    dones.append(done)
                 rewards.append(reward)
 
                 if isinstance(info, Danger):
@@ -71,7 +76,7 @@ class Explorer(object):
             if update_memory:
                 if isinstance(info, ReachGoal) or isinstance(info, Collision):
                     # only add positive(success) or negative(collision) experience in experience set
-                    self.update_memory(states, actions, rewards, imitation_learning)
+                    self.update_memory(states, actions, rewards, dones, imitation_learning, dqn)
 
             cumulative_rewards.append(sum([pow(self.gamma, t * self.robot.time_step * self.robot.v_pref)
                                            * reward for t, reward in enumerate(rewards)]))
@@ -94,40 +99,52 @@ class Explorer(object):
             logging.info('Collision cases: ' + ' '.join([str(x) for x in collision_cases]))
             logging.info('Timeout cases: ' + ' '.join([str(x) for x in timeout_cases]))
 
-    def update_memory(self, states, actions, rewards, imitation_learning=False):
+    def update_memory(self, states, actions, rewards, done, imitation_learning=False, dqn = False):
         if self.memory is None or self.gamma is None:
             raise ValueError('Memory or gamma value is not set!')
 
         for i, state in enumerate(states):
             reward = rewards[i]
 
-            # VALUE UPDATE
-            if imitation_learning:
-                # define the value of states in IL as cumulative discounted rewards, which is the same in RL
-                state = self.target_policy.transform(state)
-                # value = pow(self.gamma, (len(states) - 1 - i) * self.robot.time_step * self.robot.v_pref)
-                value = sum([pow(self.gamma, max(t - i, 0) * self.robot.time_step * self.robot.v_pref) * reward
-                             * (1 if t >= i else 0) for t, reward in enumerate(rewards)])
+            if not dqn:
+                # VALUE UPDATE
+                if imitation_learning:
+                    # define the value of states in IL as cumulative discounted rewards, which is the same in RL
+                    state = self.target_policy.transform(state)
+                    # value = pow(self.gamma, (len(states) - 1 - i) * self.robot.time_step * self.robot.v_pref)
+                    value = sum([pow(self.gamma, max(t - i, 0) * self.robot.time_step * self.robot.v_pref) * reward
+                                * (1 if t >= i else 0) for t, reward in enumerate(rewards)])
+                else:
+                    if i == len(states) - 1:
+                        # terminal state
+                        value = reward
+                    else:
+                        next_state = states[i + 1]
+                        gamma_bar = pow(self.gamma, self.robot.time_step * self.robot.v_pref)
+                        value = reward + gamma_bar * self.target_model(next_state.unsqueeze(0)).data.item()
+                value = torch.Tensor([value]).to(self.device)
+
+                # # transform state of different human_num into fixed-size tensor
+                # if len(state.size()) == 1:
+                #     human_num = 1
+                #     feature_size = state.size()[0]
+                # else:
+                #     human_num, feature_size = state.size()
+                # if human_num != 5:
+                #     padding = torch.zeros((5 - human_num, feature_size))
+                #     state = torch.cat([state, padding])
+                self.memory.push((state, value))
             else:
+                # Q VALUE UPDATE
+                action = actions[i]
+                d = done[i]
                 if i == len(states) - 1:
                     # terminal state
-                    value = reward
+                    next_state = states[i]
                 else:
                     next_state = states[i + 1]
-                    gamma_bar = pow(self.gamma, self.robot.time_step * self.robot.v_pref)
-                    value = reward + gamma_bar * self.target_model(next_state.unsqueeze(0)).data.item()
-            value = torch.Tensor([value]).to(self.device)
-
-            # # transform state of different human_num into fixed-size tensor
-            # if len(state.size()) == 1:
-            #     human_num = 1
-            #     feature_size = state.size()[0]
-            # else:
-            #     human_num, feature_size = state.size()
-            # if human_num != 5:
-            #     padding = torch.zeros((5 - human_num, feature_size))
-            #     state = torch.cat([state, padding])
-            self.memory.push((state, value))
+                
+                self.memory.push((state, action, reward, next_state, int(d)))
 
 
 def average(input_list):

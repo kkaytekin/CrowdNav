@@ -11,6 +11,7 @@ class Parser:
             self.parser.add_argument('--policy', type=str, default='cadrl')
             self.parser.add_argument('--gpu', default=False, action='store_true')
             self.parser.add_argument('--debug', default=False, action='store_true')
+            self.parser.add_argument('--training_method', type=str, default='v_learning')
             if mode == 'train':
                 self.parser.add_argument('--train_config', type=str, default='configs/train.config')
                 self.parser.add_argument('--output_dir', type=str, default='data/output')

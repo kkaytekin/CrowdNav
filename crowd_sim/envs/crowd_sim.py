@@ -623,7 +623,7 @@ class CrowdSim(gym.Env):
         ## check if the robot run out of the boundary
         robot_x, robot_y = self.robot.get_position()
         out = False
-        if np.abs(robot_x) > self.boundary / 2 or np.abs(robot_y) > self.boundary / 2:
+        if np.abs(end_position[0]) + self.robot.radius > self.boundary / 2 or np.abs(end_position[1]) + self.robot.radius > self.boundary / 2:
             out = True
 
         if self.global_time >= self.time_limit - 1:
@@ -790,7 +790,7 @@ class CrowdSim(gym.Env):
             goal = mlines.Line2D([self.robot_gx], [self.robot_gy], color=goal_color, marker='*', linestyle='None', markersize=15, label='Goal')
             robot = plt.Circle(robot_positions[0], self.robot.radius, fill=True, color=robot_color)
             boundary = plt.Rectangle((-self.boundary / 2, -self.boundary / 2), self.boundary, self.boundary,
-             edgecolor = 'Blue',
+             edgecolor = 'black',
              fill=False,
              lw=5)
             ax.add_artist(robot)
@@ -857,8 +857,8 @@ class CrowdSim(gym.Env):
             # compute attention scores
             if self.attention_weights is not None:
                 attention_scores = [
-                    plt.text(10, 5 - 0.6 * i, 'Human {}: {:.2f}'.format(i + 1, self.attention_weights[0][i]),
-                             fontsize=16) for i in range(len(self.humans))]
+                    plt.text(10.5, 5 - 0.6 * i, 'Human {}: {:.3f}'.format(i + 1, self.attention_weights[0][i]),
+                             fontsize=12) for i in range(len(self.humans))]
 
             # compute orientation in each step and use arrow to show the direction
             radius = self.robot.radius
@@ -955,7 +955,7 @@ class CrowdSim(gym.Env):
                         ax.add_artist(arrow)
                     if self.attention_weights is not None:
                         human.set_color(str(self.attention_weights[frame_num][i]))
-                        attention_scores[i].set_text('human {}: {:.2f}'.format(i, self.attention_weights[frame_num][i]))
+                        attention_scores[i].set_text('human {}: {:.3f}'.format(i, self.attention_weights[frame_num][i]))
 
                 time.set_text('Time: {:.2f}'.format(frame_num * self.time_step))
 
@@ -967,11 +967,17 @@ class CrowdSim(gym.Env):
                 # when any key is pressed draw the action value plot
                 fig, axis = plt.subplots()
                 speeds = [0] + self.robot.policy.speeds
-                rotations = self.robot.policy.rotations + [np.pi * 2]
+                # rotations = self.robot.policy.rotations + [np.pi * 2]
+                rotations = np.append(self.robot.policy.rotations, np.pi * 2)
+
+                angle_offset = (rotations[1] - rotations[0]) / 2
+                rotations = rotations - angle_offset
+                # print(self.attention_weights[global_step])
                 r, th = np.meshgrid(speeds, rotations)
                 z = np.array(self.action_values[global_step % len(self.states)][1:])
                 z = (z - np.min(z)) / (np.max(z) - np.min(z))
-                z = np.reshape(z, (16, 5))
+                z = np.reshape(z, (len(rotations) - 1, len(speeds) - 1))
+                
                 polar = plt.subplot(projection="polar")
                 polar.tick_params(labelsize=16)
                 mesh = plt.pcolormesh(th, r, z, vmin=0, vmax=1)
