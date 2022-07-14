@@ -190,7 +190,7 @@ def main():
         policy.set_env(env)
         robot.set_policy(policy)
         robot.print_info()
-        trainer.set_learning_rate(rl_learning_rate)
+        trainer.set_learning_rate(rl_learning_rate, args.optimizer)
         # fill the memory pool with some RL experience
         if args.resume:
             robot.policy.set_epsilon(epsilon_end)

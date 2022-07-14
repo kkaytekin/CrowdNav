@@ -17,6 +17,7 @@ class Parser:
                 self.parser.add_argument('--output_dir', type=str, default='data/output')
                 self.parser.add_argument('--weights', type=str)
                 self.parser.add_argument('--resume', default=False, action='store_true')
+                self.parser.add_argument('--optimizer', type=str, default='sgd')
             elif mode == 'test':
                 self.parser.add_argument('--model_dir', type=str, default=None)
                 self.parser.add_argument('--il', default=False, action='store_true')

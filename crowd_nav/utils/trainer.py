@@ -26,10 +26,12 @@ class Trainer(object):
     def init_target_model(self, target_model):
         self.target_model = copy.deepcopy(target_model)
 
-    def set_learning_rate(self, learning_rate):
+    def set_learning_rate(self, learning_rate, opt = 'sgd'):
         logging.info('Current learning rate: %f', learning_rate)
-        self.optimizer = optim.SGD(self.model.parameters(), lr=learning_rate, momentum=0.9)
-
+        if opt == 'sgd':
+            self.optimizer = optim.SGD(self.model.parameters(), lr=learning_rate, momentum=0.9)
+        elif opt == 'adam':
+            self.optimizer = optim.Adam(self.model.parameters(), lr=learning_rate)
     def optimize_epoch(self, num_epochs):
         if self.optimizer is None:
             raise ValueError('Learning rate is not set!')
@@ -76,10 +78,13 @@ class Trainer(object):
         else:
             losses = 0
             for _ in range(num_batches):
-                data = next(iter(self.data_loader))
-
                 states, actions, rewards, next_states, dones = next(iter(self.data_loader))
-            
+                states = states.to(self.device)
+                actions = actions.to(self.device)
+                rewards = rewards.to(self.device)
+                next_states = next_states.to(self.device)
+                dones = dones.to(self.device)
+                
                 ## Print the above value to debug
                 logging.debug('Action : {}', actions)
                 logging.debug('dones : {}', dones)

@@ -633,7 +633,7 @@ class CrowdSim(gym.Env):
         elif out:
             reward = self.out_boundary_penalty
             done = True
-            info = Boundary()
+            info = Collision()
         elif collision:
             reward = self.collision_penalty
             done = True
@@ -649,7 +649,11 @@ class CrowdSim(gym.Env):
             done = False
             info = Danger(dmin)
         else:
-            reward = 0
+            delta_d = (-(norm(end_position - np.array(self.robot.get_goal_position()))) + (norm(np.array([robot_x, robot_y]) - np.array(self.robot.get_goal_position()))))
+            if delta_d > 0:
+                reward = delta_d / (self.robot.v_pref * 10) * self.time_step
+            else:
+                reward = 0
             done = False
             info = Nothing()
 
