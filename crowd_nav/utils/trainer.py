@@ -98,12 +98,10 @@ class Trainer(object):
                 Q_t_next = self.target_model.forward(next_states) ## N x action_space
                 max_next_Q = torch.max(Q_t_next, 1)[0]
                 max_next_Q = max_next_Q.view(max_next_Q.size(0), 1)
-                Q_t_star = rewards + (1 - dones) * self.gamma * max_next_Q
-                
+                Q_t_star = rewards.view(rewards.size(0), 1) + (1 - dones) * self.gamma * max_next_Q
 
 
                 self.optimizer.zero_grad()
-
                 loss = self.criterion(Q_t.float(), Q_t_star.detach().float())
                 loss.backward()
                 self.optimizer.step()

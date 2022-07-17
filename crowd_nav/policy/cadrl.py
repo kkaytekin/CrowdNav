@@ -222,5 +222,8 @@ class CADRL(Policy):
         radius_sum = radius + radius1
         da = torch.norm(torch.cat([(state[:, 0] - state[:, 9]).reshape((batch, -1)), (state[:, 1] - state[:, 10]).
                                   reshape((batch, -1))], dim=1), 2, dim=1, keepdim=True)
+        # px = state[:, 0].reshape((batch, -1))
+        # py = state[:, 1].reshape((batch, -1))
+        # new_state = torch.cat([dg, v_pref, theta, radius, vx, vy, px, py, px1, py1, vx1, vy1, radius1, da, radius_sum], dim=1)
         new_state = torch.cat([dg, v_pref, theta, radius, vx, vy, px1, py1, vx1, vy1, radius1, da, radius_sum], dim=1)
         return new_state

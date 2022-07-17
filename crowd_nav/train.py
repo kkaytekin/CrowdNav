@@ -12,6 +12,7 @@ from crowd_nav.utils.memory import ReplayMemory
 from crowd_nav.utils.explorer import Explorer
 from crowd_nav.policy.policy_factory import policy_factory
 from crowd_nav.args import Parser
+import re
 
 
 def main():
@@ -37,7 +38,7 @@ def main():
     log_file = os.path.join(args.output_dir, 'output.log')
     il_weight_file = os.path.join(args.output_dir, 'il_model.pth')
     rl_weight_file = os.path.join(args.output_dir, 'rl_model.pth')
-
+    best_rl_weight_file = os.path.join(args.output_dir, 'best_rl_model.pth')
     # configure logging
     mode = 'a' if args.resume else 'w'
     file_handler = logging.FileHandler(log_file, mode=mode)
@@ -179,14 +180,27 @@ def main():
         if args.resume:
             if not os.path.exists(rl_weight_file):
                 logging.error('RL weights does not exist')
-            model.load_state_dict(torch.load(rl_weight_file))
+            model.load_state_dict(torch.load(rl_weight_file, map_location = device))
             rl_weight_file = os.path.join(args.output_dir, 'resumed_rl_model.pth')
             logging.info('Load reinforcement learning trained weights. Resume training')
+            with open(log_file, 'r') as file:
+                log = file.read()
+
+            train_pattern = r"TRAIN in episode (?P<episode>\d+) has success rate: (?P<sr>[0-1].\d+), " \
+                            r"collision rate: (?P<cr>[0-1].\d+), nav time: (?P<time>\d+.\d+), " \
+                            r"total reward: (?P<reward>[-+]?\d+.\d+)"
+            train_episode = []
+    
+            for r in re.findall(train_pattern, log):
+                train_episode.append(int(r[0]))
+                
 
         trainer.init_target_model(model)
         # explorer.update_target_model(model)
 
         # reinforcement learning
+        best_success_rate = 0
+        sr = 0
         policy.set_env(env)
         robot.set_policy(policy)
         robot.print_info()
@@ -202,6 +216,8 @@ def main():
             logging.info('Experience set size: %d/%d', len(memory), memory.capacity)
         episode = 0
 
+        if args.resume:
+            episode = train_episode[-1] + 1
         while episode < train_episodes:
             if args.resume:
                 epsilon = epsilon_end
@@ -215,7 +231,7 @@ def main():
             # evaluate the model
             if episode % evaluation_interval == 0:
                 if not args.debug: # validation takes too long
-                    explorer.run_k_episodes(env.case_size['val'], 'val', episode=episode, dqn = True)
+                    sr = explorer.run_k_episodes(env.case_size['val'], 'val', episode=episode, dqn = True)
                 else:
                     pass
 
@@ -224,13 +240,14 @@ def main():
             trainer.optimize_batch(train_batches)
             episode += 1
 
-            if episode % target_update_interval == 0:
-                explorer.update_target_model(model)
             if args.debug: # so that we can use the saved model to test visualization
-                    torch.save(model.state_dict(), rl_weight_file)
+                torch.save(model.state_dict(), rl_weight_file)
             else:
                 if episode != 0 and episode % checkpoint_interval == 0:
                     torch.save(model.state_dict(), rl_weight_file)
+                    if sr > best_success_rate:
+                        torch.save(model.state_dict(), best_rl_weight_file)
+                        best_success_rate = sr
 
         # final test
         explorer.run_k_episodes(env.case_size['test'], 'test', episode=episode, dqn = True)

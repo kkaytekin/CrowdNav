@@ -195,9 +195,27 @@ class SARL_DDQN(MultiHumanRL):
 
             if max_action is None:
                 raise ValueError('Value network is not well trained. ')
+            if np.isnan(q_values.cpu().detach().numpy()[self.max_action_id]):
+                raise ValueError('Q network is not well trained. ')
 
         if self.phase == 'train':
             self.last_state = self.transform(state)
+
+        '''
+        Below are for testing
+        '''
+        pxgx = state.self_state.gx - state.self_state.px
+        pygy = state.self_state.gy - state.self_state.py
+        dg = np.sqrt(pxgx * pxgx + pygy * pygy)
+        pxgx_norm = pxgx / dg
+        pygy_norm = pygy / dg
+
+        const_vx = state.self_state.v_pref / 2 * pxgx_norm
+        const_vy = state.self_state.v_pref / 2 * pygy_norm
+        vx = max_action.vx + const_vx
+        vy = max_action.vy + const_vy
+        
+        max_action = ActionXY(vx, vy)
 
         return max_action
     def get_max_action_id(self):

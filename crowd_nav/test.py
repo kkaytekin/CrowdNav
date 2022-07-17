@@ -79,9 +79,10 @@ def main():
         last_pos = np.array(robot.get_position())
         while not done:
             action = robot.act(ob)
-            ob, _, done, info = env.step(action)
+            ob, reward, done, info = env.step(action)
             current_pos = np.array(robot.get_position())
             logging.debug('Speed: %.2f', np.linalg.norm(current_pos - last_pos) / robot.time_step)
+            logging.info('Reward: %f', reward)
             last_pos = current_pos
         if args.traj:
             env.render('traj', args.video_file)

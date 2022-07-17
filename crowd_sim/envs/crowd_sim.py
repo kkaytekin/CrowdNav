@@ -99,7 +99,6 @@ class CrowdSim(gym.Env):
         logging.info('Square width: {}, circle width: {}'.format(self.square_width, self.circle_radius))
         logging.info("Number of static obstacles: {}".format(self.static_obstacle_num))
         logging.info("Static obstacles diameter range: {} - {}".format(2 * self.obstacle_min_radius, 2 * self.obstacle_max_radius))
-
         #Fov Config
         self.robot_fov = np.pi * config.getfloat('robot' , 'FOV')
         self.human_fov = np.pi * config.getfloat('humans', 'FOV')
@@ -389,9 +388,33 @@ class CrowdSim(gym.Env):
             ## The random seed should also be added here, otherwise the
             ## generated environment would be totally different
             np.random.seed(counter_offset[phase] + self.case_counter[phase])
-            self.robot_gx, self.robot_gy = self.generate_agent_goal()
-            # self.robot.set(0, -self.circle_radius, 0, self.circle_radius, 0, 0, np.pi / 2)
-            self.robot.set(-self.robot_gx, -self.robot_gy, self.robot_gx, self.robot_gy, 0, 0, np.pi / 2)
+            # self.robot_gx, self.robot_gy = self.generate_agent_goal(goal_range = self.square_width/ 2)
+            # self.robot.set(0, -self.square_width / 2, 0, self.square_width / 2, 0, 0, np.pi / 2)
+            # self.robot_gx, self.robot_gy = self.robot.get_goal_position()
+            while True:
+                self.robot_gx, self.robot_gy = self.generate_agent_goal(goal_range = self.square_width / 2)
+                self.robot_px, self.robot_py = self.generate_agent_goal(perturb = True, perturb_range = (self.boundary - self.square_width) / 2, goal_range = self.square_width / 2)
+
+                if np.abs(self.robot_gx - self.robot_px) > self.boundary / 2 or np.abs(self.robot_gy - self.robot_py) > self.boundary / 2:
+                    break
+
+            self.robot.set(self.robot_px, self.robot_py, self.robot_gx, self.robot_gy, 0, 0, np.pi / 2)
+            # if phase == 'train':
+            #     prob = np.random.random()
+            #     if prob < 0.3:
+            #         self.robot.set(-self.boundary / 4, 0, self.boundary / 4, 0, 0, 0, np.pi / 2)
+            #     elif prob <= 0.3 and prob < 0.9:
+            #         self.robot_gx, self.robot_gy = self.generate_agent_goal(goal_range = self.square_width / 2)
+            #         self.robot_px, self.robot_py = self.generate_agent_goal(perturb = True, perturb_range = (self.boundary - self.square_width) / 2, goal_range = self.square_width / 2)
+            #         self.robot.set(self.robot_px, self.robot_py, self.robot_gx, self.robot_gy, 0, 0, np.pi / 2)
+            #     else:
+            #         self.robot_gx, self.robot_gy = self.generate_agent_goal(goal_range = self.square_width/ 2)
+            #         self.robot.set(-self.robot_gx, -self.robot_gy, self.robot_gx, self.robot_gy, 0, 0, np.pi / 2)
+            # else:
+            #     self.robot_gx, self.robot_gy = self.generate_agent_goal(goal_range = self.square_width / 2)
+            #     self.robot_px, self.robot_py = self.generate_agent_goal(perturb = True, perturb_range = (self.boundary - self.square_width) / 2, goal_range = self.square_width / 2)
+            #     self.robot.set(self.robot_px, self.robot_py, self.robot_gx, self.robot_gy, 0, 0, np.pi / 2)
+            
             if self.case_counter[phase] >= 0:
                 np.random.seed(counter_offset[phase] + self.case_counter[phase])
                 ## Geneate static obstacles first
@@ -537,7 +560,7 @@ class CrowdSim(gym.Env):
         #     still = True
 
         if human.reached_destination():
-            gx, gy = self.generate_agent_goal()
+            gx, gy = self.generate_agent_goal(goal_range = self.square_width / 2)
             human.set(px, py, -gx, -gy, 0, 0, 0)
         # elif still:
         #     human.set(px, py, -human.gx, -human.gy, 0, 0, 0)
@@ -649,11 +672,12 @@ class CrowdSim(gym.Env):
             done = False
             info = Danger(dmin)
         else:
-            delta_d = (-(norm(end_position - np.array(self.robot.get_goal_position()))) + (norm(np.array([robot_x, robot_y]) - np.array(self.robot.get_goal_position()))))
-            if delta_d > 0:
-                reward = delta_d / (self.robot.v_pref * 10) * self.time_step
-            else:
-                reward = 0
+            # delta_d = (-(norm(end_position - np.array(self.robot.get_goal_position()))) + (norm(np.array([robot_x, robot_y]) - np.array(self.robot.get_goal_position()))))
+            # if delta_d > 0:
+            #     reward = 2 * delta_d / (self.robot.v_pref * 10) * self.time_step
+            # else:
+            #     reward = 0
+            reward = 0
             done = False
             info = Nothing()
 
@@ -861,7 +885,7 @@ class CrowdSim(gym.Env):
             # compute attention scores
             if self.attention_weights is not None:
                 attention_scores = [
-                    plt.text(10.5, 5 - 0.6 * i, 'Human {}: {:.3f}'.format(i + 1, self.attention_weights[0][i]),
+                    plt.text(self.boundary / 2 + 0.5, 5 - 0.6 * i, 'Human {}: {:.3f}'.format(i + 1, self.attention_weights[0][i]),
                              fontsize=12) for i in range(len(self.humans))]
 
             # compute orientation in each step and use arrow to show the direction
