@@ -8,11 +8,11 @@ class Parser:
         if mode == 'train' or mode == 'test':
             self.parser.add_argument('--env_config', type=str, default='configs/env.config')
             self.parser.add_argument('--policy_config', type=str, default='configs/policy.config')
+            self.parser.add_argument('--train_config', type=str, default='configs/train.config') # to visualize curriculum learning
             self.parser.add_argument('--policy', type=str, default='cadrl')
             self.parser.add_argument('--gpu', default=False, action='store_true')
             self.parser.add_argument('--debug', default=False, action='store_true')
             if mode == 'train':
-                self.parser.add_argument('--train_config', type=str, default='configs/train.config')
                 self.parser.add_argument('--output_dir', type=str, default='data/output')
                 self.parser.add_argument('--weights', type=str)
                 self.parser.add_argument('--resume', default=False, action='store_true')
@@ -34,6 +34,7 @@ class Parser:
             self.parser.add_argument('--plot_reward', default=True, action='store_true')
             self.parser.add_argument('--plot_train', default=True, action='store_true')
             self.parser.add_argument('--plot_val', default=False, action='store_true')
+            self.parser.add_argument('--plot_epsilon', default=False, action='store_true')
             self.parser.add_argument('--window_size', type=int, default=200)
 
     def parse(self):
