@@ -1,6 +1,10 @@
 # ADLR SS22 Project: Social Navigation with Reinforcement Learning
 ## Abstract
 We envision a future with safe, interactive robots which can co-exist with people. For this reason we chose the topic "Social Navigation". Social navigation is the type of navigation, during which the agent aims to avoid conflicts with pedestrians in the environment while navigating towards its goal. SARL, the state of the art method proposed by Chen et. al. [[1]](https://arxiv.org/pdf/1809.08835.pdf), explores this problem in a simple environment without any obstacles. In our work, we investigate this problem further under more challenging conditions, explore the challenges, and share our insights in overcoming them.
+## Reports
+In the following reports we explain our experiments, challenges we faced and the results we obtained from this project.
+* [Midterm Report](Midterm_Report.pdf)
+* [Final Report](final_report_05.pdf)
 
 ## Setup
 1. Install [Python-RVO2](https://github.com/sybrenstuvel/Python-RVO2) library
